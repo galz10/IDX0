@@ -659,7 +659,7 @@ extension SessionService {
         saveAllScrollback()
         persistNow()
         let controllers = Array(runtimeControllers.values)
-        controllers.forEach { $0.terminate() }
+        controllers.forEach { $0.terminate(freeSynchronously: true) }
         runtimeControllers.removeAll()
         ownerSessionIDByControllerID.removeAll()
         launchStartedAtByControllerID.removeAll()
@@ -675,7 +675,7 @@ extension SessionService {
         }
         niriAppControllersByItemID.removeAll()
         niriLayoutsBySession.removeAll()
-        host.shutdown()
+        host.shutdown(freeSurfacesSynchronously: true)
     }
 
     // MARK: - Scrollback Persistence

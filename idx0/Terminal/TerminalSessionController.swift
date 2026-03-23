@@ -155,8 +155,8 @@ final class TerminalSessionController: ObservableObject {
         requestLaunchIfNeeded()
     }
 
-    func terminate() {
-        terminalSurface?.destroy()
+    func terminate(freeSynchronously: Bool = false) {
+        terminalSurface?.destroy(freeSynchronously: freeSynchronously)
         terminalSurface = nil
         setRuntimeState(.terminated(exitCode: nil))
     }

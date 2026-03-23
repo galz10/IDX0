@@ -36,6 +36,7 @@ final class SessionService: ObservableObject {
 
     var runtimeControllers: [UUID: TerminalSessionController] = [:]
     var ownerSessionIDByControllerID: [UUID: UUID] = [:]
+    var pendingPaneControllerEnsureIDs: Set<UUID> = []
     var launchStartedAtByControllerID: [UUID: Date] = [:]
     var launchUsedWrapperByControllerID: [UUID: Bool] = [:]
     var wrapperStartupProbeTaskByControllerID: [UUID: Task<Void, Never>] = [:]

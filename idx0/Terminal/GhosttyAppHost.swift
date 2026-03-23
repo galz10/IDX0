@@ -128,9 +128,9 @@ final class GhosttyAppHost {
         Logger.info("Ghostty loaded from: \(loadPath)")
     }
 
-    func shutdown() {
+    func shutdown(freeSurfacesSynchronously: Bool = false) {
         let surfaces = Array(surfaceByKey.values)
-        surfaces.forEach { $0.destroy() }
+        surfaces.forEach { $0.destroy(freeSynchronously: freeSurfacesSynchronously) }
         surfaceByKey.removeAll()
 
         for observer in appObservers {

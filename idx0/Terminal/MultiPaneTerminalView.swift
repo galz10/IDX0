@@ -113,6 +113,37 @@ final class MultiPaneContainerView: NSView {
             installRuntimeView(runtimeView, forController: controllerID)
         }
 
+        // Refresh views for existing controller IDs. A controller can relaunch in place
+        // (same ID, new runtimeView), so ID-set diff alone is not enough.
+        for controllerID in newIDs.intersection(oldIDs) {
+            guard let controller = controllerProvider(controllerID) else { continue }
+            controller.requestLaunchIfNeeded()
+
+            guard let runtimeView = controller.runtimeView else {
+                scheduleRetry(controllerID: controllerID, controllerProvider: controllerProvider)
+                continue
+            }
+
+            guard let installedView = installedControllers[controllerID] else {
+                installRuntimeView(runtimeView, forController: controllerID)
+                continue
+            }
+
+            let installedIsAttachedHere = installedView.superview === self
+            guard installedView !== runtimeView || !installedIsAttachedHere else { continue }
+
+            if installedView !== runtimeView {
+                if let nativeView = installedView as? GhosttyNativeView,
+                   let surface = nativeView.terminalSurface?.surface {
+                    idx0_ghostty_surface_set_occlusion(surface, false)
+                }
+                viewToControllerID.removeValue(forKey: ObjectIdentifier(installedView))
+                installedView.removeFromSuperview()
+            }
+
+            installRuntimeView(runtimeView, forController: controllerID)
+        }
+
         currentTree = paneTree
         currentFocusedID = focusedControllerID
 
@@ -206,15 +237,36 @@ final class MultiPaneContainerView: NSView {
             self.pendingRetryControllerIDs.removeAll()
 
             for id in pending {
-                guard self.installedControllers[id] == nil,
-                      let controller = controllerProvider(id),
-                      let runtimeView = controller.runtimeView else {
+                guard let controller = controllerProvider(id) else { continue }
+                guard let runtimeView = controller.runtimeView else {
                     // Still not ready — retry again
-                    if self.installedControllers[id] == nil {
-                        self.scheduleRetry(controllerID: id, controllerProvider: controllerProvider)
-                    }
+                    self.scheduleRetry(controllerID: id, controllerProvider: controllerProvider)
                     continue
                 }
+
+                if let installedView = self.installedControllers[id] {
+                    let installedIsAttachedHere = installedView.superview === self
+                    if installedView === runtimeView && installedIsAttachedHere {
+                        if id == self.currentFocusedID {
+                            controller.syncFocusIfNeeded()
+                        }
+                        continue
+                    }
+
+                    if installedView !== runtimeView {
+                        if let nativeView = installedView as? GhosttyNativeView,
+                           let surface = nativeView.terminalSurface?.surface {
+                            idx0_ghostty_surface_set_occlusion(surface, false)
+                        }
+                        self.viewToControllerID.removeValue(forKey: ObjectIdentifier(installedView))
+                        installedView.removeFromSuperview()
+                    } else {
+                        // Same runtime view object but detached from us; clear stale mapping
+                        // before re-installing it.
+                        self.viewToControllerID.removeValue(forKey: ObjectIdentifier(installedView))
+                    }
+                }
+
                 self.installRuntimeView(runtimeView, forController: id)
                 self.needsLayout = true
                 if id == self.currentFocusedID {

@@ -1187,7 +1187,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.0.1;
+				MARKETING_VERSION = 0.0.11;
 				OTHER_LDFLAGS = (
 					"-lc++",
 					"-framework",
@@ -1247,7 +1247,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.0.1;
+				MARKETING_VERSION = 0.0.11;
 				OTHER_LDFLAGS = (
 					"-lc++",
 					"-framework",

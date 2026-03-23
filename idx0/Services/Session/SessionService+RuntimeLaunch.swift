@@ -42,7 +42,15 @@ extension SessionService {
             return existing
         }
         guard let ownerSessionID = ownerSessionID(forControllerID: controllerID) else { return nil }
-        return ensureController(forControllerID: controllerID, ownerSessionID: ownerSessionID)
+        guard pendingPaneControllerEnsureIDs.insert(controllerID).inserted else { return nil }
+
+        // Defer controller creation so we don't publish SwiftUI state while view updates are in-flight.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            _ = self.ensureController(forControllerID: controllerID, ownerSessionID: ownerSessionID)
+            self.pendingPaneControllerEnsureIDs.remove(controllerID)
+        }
+        return nil
     }
 
     /// Read-only controller lookup used by SwiftUI view rendering.
@@ -106,6 +114,12 @@ extension SessionService {
                 self.scheduleWrapperStartupProbe(controllerID: controllerID, sessionID: ownerSessionID)
             case .running:
                 self.applyLaunchResultIfAvailable(for: ownerSessionID)
+                if self.launchUsedWrapperByControllerID[controllerID] == true,
+                   self.launcherClient.loadLaunchResult(sessionID: ownerSessionID) != nil {
+                    // Helper script reported launch status, so avoid eager fallback
+                    // relaunches that can cause a visible "double load" flash.
+                    self.cancelWrapperStartupProbe(for: controllerID)
+                }
                 if self.sessions.first(where: { $0.id == ownerSessionID })?.sandboxEnforcementState != .degraded {
                     self.setStatusText(for: ownerSessionID, text: nil)
                 }
@@ -489,6 +503,12 @@ extension SessionService {
             }
             try? await Task.sleep(nanoseconds: self.wrapperStartupProbeDelayNanoseconds)
             guard !Task.isCancelled else { return }
+            if self.launchInitializedControllerIDs.contains(controllerID) {
+                return
+            }
+            if self.launcherClient.loadLaunchResult(sessionID: sessionID) != nil {
+                return
+            }
             _ = self.retryWrapperLaunchWithDirectShell(
                 controllerID: controllerID,
                 sessionID: sessionID,

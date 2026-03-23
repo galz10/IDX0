@@ -49,7 +49,7 @@ final class GhosttyTerminalSurface: ObservableObject {
         flushPendingTextIfReady()
     }
 
-    func destroy() {
+    func destroy(freeSynchronously: Bool = false) {
         let context = callbackContext
         callbackContext = nil
         context?.takeUnretainedValue().surface = nil
@@ -66,6 +66,12 @@ final class GhosttyTerminalSurface: ObservableObject {
         idx0_ghostty_surface_set_focus(surfaceToFree, false)
         idx0_ghostty_surface_set_occlusion(surfaceToFree, false)
         view.prepareForSurfaceTeardown()
+
+        if freeSynchronously {
+            idx0_ghostty_surface_free(surfaceToFree)
+            context?.release()
+            return
+        }
 
         // Keep free asynchronous to avoid tearing down while AppKit/CALayer is
         // still in the same render transaction for this view.
