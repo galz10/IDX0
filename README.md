@@ -1,49 +1,71 @@
 # IDX0
 
-`IDX0` is a native macOS, session-first terminal workspace for agentic development workflows.
+`IDX0` is a native macOS app for running and supervising multiple coding sessions in one place.
 
-It combines fast terminal surfaces (GhosttyKit), session/worktree orchestration, a supervision workflow rail (checkpoints, handoffs, reviews, approvals), and multiple control surfaces (keyboard, menu, command palette, IPC, and CLI).
+Think of it as a mission-control workspace for development: each session has its own terminal context, and you can add tools like a browser or VS Code inside the same canvas.
 
-## What IDX0 Does
+## Overview
 
-- Session-first workflow:
-  - Create, focus, pin, and restore multiple long-lived coding sessions.
-  - Track per-session state (activity, layout, queue context, metadata).
-- Repo/worktree aware launches:
-  - Start sessions from repositories, create or attach worktrees, and preserve launch context.
-- Multi-surface command model:
-  - One action model shared across shortcuts, app menu, command palette, IPC, and CLI.
-- Supervision workflow rail:
-  - Checkpoints, handoffs, review requests, approval requests, queue items, and timeline events.
-- Niri canvas workspace mode:
-  - Tiled session surfaces with terminal, browser, and app tiles.
-  - Built-in runtime tiles for `t3-code` and `vscode`.
+`IDX0` helps you:
+
+- Run multiple long-lived coding sessions without losing context.
+- Start work from a repo or worktree and keep each task isolated.
+- Arrange terminal/browser/app tiles inside a visual workspace.
+- Launch agent CLIs from the app and track what each session is doing.
+- Restore your workspace state when you relaunch.
+
+## Install (DMG)
+
+If you want to use IDX0 without building from source, download the DMG from the release page:
+
+- [IDX0 v0.0.1 release (DMG)](https://github.com/galz10/IDX0/releases/tag/v0.0.1)
+
+If you prefer building from source, follow the setup steps below.
+
+## Screenshots
+
+Workspace with a terminal tile:
+
+![IDX0 workspace with terminal tile](docs/images/idx0-workspace-terminal.png)
+
+Workspace with a VS Code tile:
+
+![IDX0 workspace with VS Code tile](docs/images/idx0-workspace-vscode.png)
+
+Workspace with an embedded browser tile:
+
+![IDX0 workspace with browser tile](docs/images/idx0-workspace-browser.png)
+
+## How People Use IDX0
+
+1. Create a session for a task (quick terminal, repo session, or worktree session).
+2. Open the tools you need in that session (terminal, browser, VS Code, and other tiles).
+3. Run an agent CLI and keep working while IDX0 tracks session activity.
+4. Save a checkpoint before major changes, then request review or create a handoff.
+5. Return later and continue from the same layout and session context.
+
+## Core Features
+
+- Session-first workspace:
+  - Create, focus, pin, rename, and restore sessions.
+  - Group sessions by project and switch quickly.
+- Niri mode:
+  - Tile terminals, browser views, and app runtimes in flexible workspaces.
+  - Use keyboard shortcuts and command palette for fast control.
 - Embedded browser:
-  - Session/browser state, bookmarks/history persistence, and cookie hydration support.
-- Tooling orchestration:
-  - Discovery and launch of installed agentic CLIs (`gemini-cli`, `claude`, `codex`, `opencode`, `droid`).
-- Persistence and recovery:
-  - File-backed JSON stores for sessions/workflows/settings with schema-aware compatibility behavior.
-
-## Architecture Snapshot
-
-- App bootstrap/orchestration: `idx0/App`
-- Domain services: `idx0/Services`
-- Models/contracts: `idx0/Models`
-- Persistence stores: `idx0/Persistence`
-- Ghostty terminal bridge/surfaces: `idx0/Terminal`
-- UI composition: `idx0/UI`
-- Shared IPC contract: `Sources/IPCShared`
-- CLI client: `Sources/idx0`
+  - In-session browsing with persisted history/bookmarks and cookie import support.
+- Tool launch integration:
+  - Discover and launch installed CLIs like `gemini-cli`, `claude`, `codex`, `opencode`, and `droid`.
+- CLI + IPC control:
+  - Script and automate the app from a local `idx0` CLI.
 
 ## Requirements
 
 - macOS 14+
-- Xcode (project currently generated for Xcode 26.3)
+- Xcode (project generated for Xcode 26.3)
 - `xcodegen`
-- Metal toolchain component:
-  - `xcodebuild -downloadComponent MetalToolchain`
-- `zig` (only required when building `GhosttyKit.xcframework` from source)
+- Metal toolchain component (`xcodebuild -downloadComponent MetalToolchain`)
+- `zig` (only if you need to build `GhosttyKit.xcframework` from source)
 
 ## Quick Start (Source Build)
 
@@ -54,17 +76,13 @@ brew install xcodegen
 xcodebuild -downloadComponent MetalToolchain
 ```
 
-2. Ensure `GhosttyKit.xcframework` is available:
+2. Set up GhosttyKit dependency:
 
 ```bash
 ./scripts/setup.sh
 ```
 
-Notes:
-- If `./GhosttyKit.xcframework` already exists, setup reuses it.
-- If it does not exist, setup can build/cache it (and will initialize/clone `ghostty` source as needed).
-
-3. Generate the Xcode project:
+3. Generate the project:
 
 ```bash
 xcodegen generate
@@ -76,11 +94,11 @@ xcodegen generate
 open idx0.xcodeproj
 ```
 
-Scheme: `idx0`
+Use scheme: `idx0`.
 
-## CLI and IPC
+## CLI Control (Optional)
 
-`IDX0` includes a local CLI client (`Sources/idx0`) that controls the running app over a Unix domain socket.
+The repo includes a local CLI (`Sources/idx0`) that talks to the running app over IPC.
 
 Common commands:
 
@@ -95,17 +113,23 @@ idx0 respond-approval --approval-id <uuid> --status approved
 idx0 list-vibe-tools
 ```
 
-IPC socket path:
+IPC socket:
 
 - `~/Library/Application Support/idx0/run/idx0.sock`
 
 Protocol reference:
 
-- [`docs/ipc-protocol.md`](/Users/gal/Documents/Github/idx0/docs/ipc-protocol.md)
+- [docs/ipc-protocol.md](docs/ipc-protocol.md)
+
+## Contributor Docs
+
+- [docs/README.md](docs/README.md)
+- [docs/contribution-guide.md](docs/contribution-guide.md)
+- [docs/style-guide.md](docs/style-guide.md)
+- [docs/testing-guide.md](docs/testing-guide.md)
+- [docs/architecture/deep-dive.md](docs/architecture/deep-dive.md)
 
 ## Quality Gates
-
-From repo root:
 
 ```bash
 # Build + tests
@@ -114,31 +138,16 @@ xcodebuild -project idx0.xcodeproj -scheme idx0 -destination 'platform=macOS' te
 # Maintainability policy gate
 ./scripts/maintainability-gate.sh
 
-# Core coverage gate (Services/Models/Persistence/Utilities)
+# Core coverage gate
 ./scripts/coverage-core.sh
 ```
-
-## Documentation
-
-Contributor and architecture docs:
-
-- [`docs/README.md`](/Users/gal/Documents/Github/idx0/docs/README.md)
-
-Recommended reading order for contributors:
-
-1. [`docs/contribution-guide.md`](/Users/gal/Documents/Github/idx0/docs/contribution-guide.md)
-2. [`docs/style-guide.md`](/Users/gal/Documents/Github/idx0/docs/style-guide.md)
-3. [`docs/testing-guide.md`](/Users/gal/Documents/Github/idx0/docs/testing-guide.md)
-4. [`docs/architecture/deep-dive.md`](/Users/gal/Documents/Github/idx0/docs/architecture/deep-dive.md)
 
 ## Troubleshooting
 
 - Missing GhosttyKit framework:
   - Run `./scripts/setup.sh` and confirm it ends with `==> Done`.
-- Build errors about `metal` tool:
+- Build errors for `metal`:
   - Run `xcodebuild -downloadComponent MetalToolchain`.
-- CLI tools not appearing in-app:
-  - Ensure binaries are on your user shell `PATH`.
-  - When running from Xcode, verify scheme environment `PATH` if needed.
-- Coverage run fails during local codesign:
-  - Use standard build/test + maintainability gate, then run coverage on a signing-valid profile/machine.
+- CLI tools not appearing:
+  - Confirm the binaries are on your shell `PATH`.
+  - If launching from Xcode, verify scheme `PATH` environment values.

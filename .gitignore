@@ -10,6 +10,7 @@ DerivedData/
 *.xcscmblueprint
 build/
 Build/
+dist/
 .swiftpm/configuration/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
