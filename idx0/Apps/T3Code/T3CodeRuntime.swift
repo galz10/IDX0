@@ -311,14 +311,14 @@ final class T3BuildCoordinator {
 
         try await runChecked(
             executable: "/bin/zsh",
-            arguments: ["-ilc", manifest.installCommand],
+            arguments: ["-ilc", interactiveShellCommand(manifest.installCommand, workingDirectory: paths.sourceDirectory.path)],
             currentDirectory: paths.sourceDirectory.path,
             paths: paths
         )
 
         try await runChecked(
             executable: "/bin/zsh",
-            arguments: ["-ilc", manifest.buildCommand],
+            arguments: ["-ilc", interactiveShellCommand(manifest.buildCommand, workingDirectory: paths.sourceDirectory.path)],
             currentDirectory: paths.sourceDirectory.path,
             paths: paths
         )
@@ -332,7 +332,7 @@ final class T3BuildCoordinator {
                 appendBuildLog(paths: paths, line: "Client bundle missing after build; running canonical full build")
                 try await runChecked(
                     executable: "/bin/zsh",
-                    arguments: ["-ilc", T3BuildManifest.canonicalBuildCommand],
+                    arguments: ["-ilc", interactiveShellCommand(T3BuildManifest.canonicalBuildCommand, workingDirectory: paths.sourceDirectory.path)],
                     currentDirectory: paths.sourceDirectory.path,
                     paths: paths
                 )
@@ -402,6 +402,22 @@ final class T3BuildCoordinator {
             .filter { !$0.isEmpty }
 
         return candidates.first(where: { $0.hasPrefix("/") })
+    }
+
+    private func interactiveShellCommand(_ command: String, workingDirectory: String) -> String {
+        "builtin cd -- \(shellEscape(workingDirectory)) && \(command)"
+    }
+
+    private func shellEscape(_ value: String) -> String {
+        guard !value.isEmpty else { return "''" }
+
+        let safeCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-")
+        if value.rangeOfCharacter(from: safeCharacters.inverted) == nil {
+            return value
+        }
+
+        let escaped = value.replacingOccurrences(of: "'", with: "'\"'\"'")
+        return "'\(escaped)'"
     }
 
     private func runChecked(
