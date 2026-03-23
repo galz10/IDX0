@@ -1,3 +1,5 @@
+![IDX0 logo](docs/images/idx0-logo.png)
+
 # IDX0
 
 `IDX0` is a native macOS app for running and supervising multiple coding sessions in one place.
