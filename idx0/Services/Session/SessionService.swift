@@ -299,6 +299,7 @@ final class SessionService: ObservableObject {
                 id: NiriAppID.excalidraw,
                 displayName: "Excalidraw",
                 icon: "pencil.and.scribble",
+                iconImageName: "icon-excalidraw",
                 menuSubtitle: "Run Excalidraw whiteboard in-canvas",
                 isVisibleInMenus: true,
                 supportsWebZoomPersistence: true,
