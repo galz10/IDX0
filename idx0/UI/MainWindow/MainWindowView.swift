@@ -1,6 +1,10 @@
 import AppKit
 import SwiftUI
 
+extension Notification.Name {
+    static let niriSpotlightDismissRequested = Notification.Name("niriSpotlightDismissRequested")
+}
+
 struct MainWindowView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @EnvironmentObject private var sessionService: SessionService
@@ -29,6 +33,7 @@ struct MainWindowView: View {
                         SessionSidebarView()
                             .frame(width: sidebarWidth)
                             .transition(.move(edge: .leading))
+                            .simultaneousGesture(TapGesture().onEnded { requestNiriSpotlightDismissal() })
 
                         SidebarResizeHandle(width: $sidebarWidth, min: Self.minSidebarWidth, max: Self.maxSidebarWidth)
                     }
@@ -39,6 +44,7 @@ struct MainWindowView: View {
                             .transaction { t in t.animation = nil }
 
                         TabBarOverlay()
+                            .simultaneousGesture(TapGesture().onEnded { requestNiriSpotlightDismissal() })
                     }
 
                     if coordinator.showingCheckpoints {
@@ -47,6 +53,7 @@ struct MainWindowView: View {
                         CheckpointsSidebar()
                             .frame(width: checkpointsWidth)
                             .transition(.move(edge: .trailing))
+                            .simultaneousGesture(TapGesture().onEnded { requestNiriSpotlightDismissal() })
                     }
                 }
             }
@@ -65,6 +72,24 @@ struct MainWindowView: View {
                     .zIndex(100)
             }
 
+            // Rename session overlay
+            if coordinator.showingRenameSessionSheet {
+                ZStack {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .ignoresSafeArea()
+                        .onTapGesture { coordinator.cancelRenameSession() }
+
+                    RenameSessionSheet()
+                        .environmentObject(coordinator)
+                        .padding(.top, 60)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .zIndex(100)
+                .onKeyPress(.escape) { coordinator.cancelRenameSession(); return .handled }
+            }
+
             // Niri onboarding coaching overlay
             if coordinator.showingNiriOnboarding {
                 NiriOnboardingOverlay()
@@ -77,6 +102,7 @@ struct MainWindowView: View {
         .animation(.easeOut(duration: 0.12), value: sessionService.settings.sidebarVisible)
         .animation(.spring(duration: 0.28, bounce: 0.12), value: coordinator.showingCommandPalette)
         .animation(.spring(duration: 0.28, bounce: 0.12), value: coordinator.showingQuickSwitch)
+        .animation(.spring(duration: 0.25, bounce: 0.1), value: coordinator.showingRenameSessionSheet)
         .animation(.easeOut(duration: 0.12), value: coordinator.showingCheckpoints)
         .animation(.easeOut(duration: 0.15), value: coordinator.showingDiffOverlay)
         .animation(.spring(duration: 0.35, bounce: 0.15), value: coordinator.showingNiriOnboarding)
@@ -111,5 +137,8 @@ struct MainWindowView: View {
             coordinator.showingNiriOnboarding = true
         }
     }
-}
 
+    private func requestNiriSpotlightDismissal() {
+        NotificationCenter.default.post(name: .niriSpotlightDismissRequested, object: nil)
+    }
+}

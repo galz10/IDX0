@@ -81,6 +81,12 @@ extension AppCoordinator {
             sessionService.relaunchSession(selectedSessionID)
             return true
         case .commandPalette:
+            // In Niri mode, Cmd+K opens the unified tile spotlight instead
+            if sessionService.settings.niriCanvasEnabled,
+               let sessionID = sessionService.selectedSessionID {
+                niriQuickAddRequestSessionID = sessionID
+                return true
+            }
             presentCommandPalette()
             return true
         case .keyboardShortcuts:

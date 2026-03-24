@@ -9,65 +9,117 @@ struct QuickSwitchOverlay: View {
     @FocusState private var queryFocused: Bool
     @State private var query = ""
     @State private var selectedIndex = 0
+    @State private var hoverReady = false
+    @State private var lastSelectionSource: SelectionSource = .keyboard
+    private enum SelectionSource { case keyboard, hover }
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.45)
+            // Invisible dismiss layer (no dimming)
+            Color.clear
+                .contentShape(Rectangle())
                 .ignoresSafeArea()
                 .onTapGesture { dismiss() }
 
             VStack(spacing: 0) {
+                // Search field
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(tc.tertiaryText)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(tc.accent)
 
                     TextField("Switch to session...", text: $query)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 14))
+                        .font(.system(size: 13))
                         .focused($queryFocused)
                         .onSubmit { switchToSelected() }
                         .onChange(of: query) { _, _ in selectedIndex = 0 }
+
+                    if !query.isEmpty {
+                        Button {
+                            query = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(tc.tertiaryText)
+                        }
+                        .buttonStyle(.plain)
+                        .idxHitTarget()
+                    }
+
+                    keyBadge("esc")
+                        .idxHitTarget()
+                        .onTapGesture { dismiss() }
                 }
-                .padding(12)
-                .background(tc.surface0)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
 
                 Rectangle()
                     .fill(tc.divider)
                     .frame(height: 1)
 
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(Array(filteredSessions.prefix(10).enumerated()), id: \.element.id) { index, session in
-                            sessionRow(session, isSelected: index == selectedIndex)
-                                .onTapGesture {
-                                    selectedIndex = index
-                                    switchToSelected()
+                if !filteredSessions.isEmpty {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 2) {
+                                ForEach(Array(filteredSessions.prefix(10).enumerated()), id: \.element.id) { index, session in
+                                    sessionRow(session, isSelected: index == selectedIndex)
+                                        .id(session.id)
+                                        .onTapGesture {
+                                            selectedIndex = index
+                                            switchToSelected()
+                                        }
+                                        .onHover { hovering in
+                                            guard hoverReady, hovering else { return }
+                                            lastSelectionSource = .hover
+                                            selectedIndex = index
+                                        }
                                 }
+                            }
+                            .padding(6)
+                        }
+                        .frame(maxHeight: 340)
+                        .scrollIndicators(.hidden)
+                        .onChange(of: selectedIndex) { _, newValue in
+                            guard lastSelectionSource == .keyboard else { return }
+                            if let session = filteredSessions.prefix(10).dropFirst(newValue).first {
+                                withAnimation(.easeOut(duration: 0.08)) {
+                                    proxy.scrollTo(session.id, anchor: .center)
+                                }
+                            }
                         }
                     }
-                    .padding(6)
-                }
-                .frame(maxHeight: 340)
-
-                if filteredSessions.isEmpty {
-                    Text("No matching sessions")
-                        .font(.system(size: 12))
-                        .foregroundStyle(tc.tertiaryText)
-                        .padding(16)
+                } else {
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 10))
+                            .foregroundStyle(tc.tertiaryText)
+                        Text("No matching sessions")
+                            .font(.system(size: 11))
+                            .foregroundStyle(tc.tertiaryText)
+                    }
+                    .padding(12)
                 }
             }
             .frame(width: 420)
-            .background(tc.sidebarBackground, in: RoundedRectangle(cornerRadius: 12))
+            .background(tc.sidebarBackground, in: RoundedRectangle(cornerRadius: 10))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(tc.surface2.opacity(0.5), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(tc.surface2.opacity(0.4), lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
+            .shadow(color: .black.opacity(0.35), radius: 20, y: 6)
             .padding(.top, 60)
             .frame(maxHeight: .infinity, alignment: .top)
         }
-        .onAppear { queryFocused = true }
+        .onAppear {
+            hoverReady = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                queryFocused = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                hoverReady = true
+            }
+        }
         .onKeyPress(.escape) { dismiss(); return .handled }
         .onKeyPress(.downArrow) { moveSelection(1); return .handled }
         .onKeyPress(.upArrow) { moveSelection(-1); return .handled }
@@ -82,17 +134,21 @@ struct QuickSwitchOverlay: View {
                 .frame(width: 6, height: 6)
 
             Image(systemName: session.isWorktreeBacked ? "arrow.triangle.branch" : "terminal")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(tc.tertiaryText)
-                .frame(width: 16)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(isSelected ? tc.accent : tc.secondaryText)
+                .frame(width: 24, height: 24)
+                .background(
+                    isSelected ? tc.accent.opacity(0.1) : tc.surface1,
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                )
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(FuzzyMatch.highlight(query: query, in: session.title))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(session.id == sessionService.selectedSessionID ? tc.secondaryText : tc.primaryText)
                     .lineLimit(1)
 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     if let branch = session.branchName, !branch.isEmpty {
                         HStack(spacing: 2) {
                             Image(systemName: "arrow.triangle.branch")
@@ -104,8 +160,9 @@ struct QuickSwitchOverlay: View {
                     }
 
                     Text(session.subtitle)
-                        .font(.system(size: 9))
-                        .foregroundStyle(tc.mutedText)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(tc.tertiaryText)
+                        .lineLimit(1)
                 }
             }
 
@@ -119,16 +176,25 @@ struct QuickSwitchOverlay: View {
                 Text("current")
                     .font(.system(size: 8, weight: .semibold, design: .rounded))
                     .textCase(.uppercase)
-                    .foregroundStyle(tc.mutedText)
+                    .foregroundStyle(tc.tertiaryText)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(tc.surface0, in: Capsule())
+                    .background(tc.surface1, in: Capsule())
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
         .background(isSelected ? tc.surface0 : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-        .contentShape(Rectangle())
+        .contentShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func keyBadge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .foregroundStyle(tc.tertiaryText)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(tc.surface1, in: RoundedRectangle(cornerRadius: 3))
     }
 
     private func statusColor(for session: Session) -> Color {
@@ -164,6 +230,7 @@ struct QuickSwitchOverlay: View {
     private func moveSelection(_ delta: Int) {
         let max = min(filteredSessions.count, 10) - 1
         guard max >= 0 else { return }
+        lastSelectionSource = .keyboard
         selectedIndex = min(max, Swift.max(0, selectedIndex + delta))
     }
 
