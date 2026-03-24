@@ -36,6 +36,7 @@ Key suites:
 - Runtime integration packages:
   - `Apps/VSCode/VSCodeRuntimeTests.swift`
   - `Apps/T3Code/T3CodeRuntimeTests.swift`
+  - `Apps/Excalidraw/ExcalidrawRuntimeTests.swift`
 
 ## 3. Naming and Structure Conventions
 

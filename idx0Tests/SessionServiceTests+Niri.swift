@@ -231,6 +231,33 @@ extension SessionServiceTests {
         XCTAssertEqual(layout.camera.focusedItemID, firstVSCodeID)
     }
 
+    func testNiriAddExcalidrawReusesExistingTileAndFocusesIt() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Excalidraw Reuse")).session
+        service.ensureNiriLayoutState(for: session.id)
+
+        guard let firstExcalidrawID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw) else {
+            XCTFail("Expected Excalidraw tile")
+            return
+        }
+
+        _ = service.niriAddTerminalRight(in: session.id)
+        let secondResult = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw)
+        XCTAssertEqual(secondResult, firstExcalidrawID)
+
+        let layout = service.niriLayout(for: session.id)
+        let excalidrawItems = layout.workspaces
+            .flatMap(\.columns)
+            .flatMap(\.items)
+            .filter { item in
+                item.ref.appID == NiriAppID.excalidraw
+            }
+        XCTAssertEqual(excalidrawItems.count, 1)
+        XCTAssertEqual(layout.camera.focusedItemID, firstExcalidrawID)
+    }
+
     func testCloseNiriFocusedT3TileRemovesItemAndController() async throws {
         let fixture = try Fixture()
         let service = fixture.service
@@ -300,6 +327,42 @@ extension SessionServiceTests {
             as: VSCodeTileController.self
         )
         XCTAssertNil(removedVSCodeController)
+        assertHasSingleTrailingEmptyWorkspace(layout)
+    }
+
+    func testCloseNiriFocusedExcalidrawTileRemovesItemAndController() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Close Excalidraw")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let itemID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw) else {
+            XCTFail("Expected Excalidraw tile")
+            return
+        }
+        let initialController: ExcalidrawTileController? = service.niriAppController(
+            for: session.id,
+            itemID: itemID,
+            appID: NiriAppID.excalidraw,
+            as: ExcalidrawTileController.self
+        )
+        XCTAssertNotNil(initialController)
+
+        service.closeNiriFocusedItem(in: session.id)
+        let layout = service.niriLayout(for: session.id)
+        let stillExists = layout.workspaces
+            .flatMap(\.columns)
+            .flatMap(\.items)
+            .contains(where: { $0.id == itemID })
+
+        XCTAssertFalse(stillExists)
+        let removedController: ExcalidrawTileController? = service.niriAppController(
+            for: session.id,
+            itemID: itemID,
+            appID: NiriAppID.excalidraw,
+            as: ExcalidrawTileController.self
+        )
+        XCTAssertNil(removedController)
         assertHasSingleTrailingEmptyWorkspace(layout)
     }
 
@@ -537,6 +600,42 @@ extension SessionServiceTests {
         assertHasSingleTrailingEmptyWorkspace(updated)
     }
 
+    func testNiriMoveExcalidrawTileAcrossWorkspacesPreservesInvariants() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Move Excalidraw")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let itemID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw) else {
+            XCTFail("Expected Excalidraw tile")
+            return
+        }
+
+        service.focusNiriWorkspaceDown(sessionID: session.id)
+        _ = service.niriAddTerminalRight(in: session.id)
+        let layout = service.niriLayout(for: session.id)
+        guard let destinationWorkspaceID = layout.camera.activeWorkspaceID else {
+            XCTFail("Expected destination workspace")
+            return
+        }
+
+        service.moveNiriItemToWorkspace(
+            sessionID: session.id,
+            itemID: itemID,
+            toWorkspaceID: destinationWorkspaceID
+        )
+        let updated = service.niriLayout(for: session.id)
+        let destinationContainsItem = updated.workspaces
+            .first(where: { $0.id == destinationWorkspaceID })?
+            .columns
+            .flatMap(\.items)
+            .contains(where: { $0.id == itemID }) ?? false
+
+        XCTAssertTrue(destinationContainsItem)
+        XCTAssertEqual(updated.camera.focusedItemID, itemID)
+        assertHasSingleTrailingEmptyWorkspace(updated)
+    }
+
     func testNiriTrailingEmptyWorkspaceInvariantWithMixedTileTypesIncludingVSCode() async throws {
         let fixture = try Fixture()
         let service = fixture.service
@@ -547,6 +646,7 @@ extension SessionServiceTests {
         _ = service.niriAddBrowserRight(in: session.id)
         _ = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.t3Code)
         _ = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.vscode)
+        _ = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw)
         _ = service.niriAddTerminalRight(in: session.id)
         service.focusNiriWorkspaceDown(sessionID: session.id)
         _ = service.niriAddTerminalRight(in: session.id)
@@ -571,6 +671,32 @@ extension SessionServiceTests {
               )
         else {
             XCTFail("Expected VS Code tile and controller")
+            return
+        }
+
+        controller.webView.pageZoom = 1.0
+        XCTAssertTrue(service.adjustNiriFocusedWebTileZoom(for: session.id, delta: 0.1))
+        XCTAssertEqual(controller.webView.pageZoom, 1.1, accuracy: 0.0001)
+
+        XCTAssertTrue(service.adjustNiriFocusedWebTileZoom(for: session.id, delta: -0.2))
+        XCTAssertEqual(controller.webView.pageZoom, 0.9, accuracy: 0.0001)
+    }
+
+    func testNiriFocusedExcalidrawTileRespondsToZoomAdjustments() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Excalidraw Zoom")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let itemID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw),
+              let controller: ExcalidrawTileController = service.niriAppController(
+                for: session.id,
+                itemID: itemID,
+                appID: NiriAppID.excalidraw,
+                as: ExcalidrawTileController.self
+              )
+        else {
+            XCTFail("Expected Excalidraw tile and controller")
             return
         }
 

@@ -51,6 +51,7 @@ final class SessionService: ObservableObject {
     let t3SnapshotManager = T3StateSnapshotManager()
     let vscodeProvisioner = OpenVSCodeProvisioner()
     let vscodeSnapshotManager = VSCodeStateSnapshotManager()
+    let excalidrawBuildCoordinator = ExcalidrawBuildCoordinator()
     let niriAppRegistry: NiriAppRegistry
     let vscodeBrowserDebugPort = 9222
     let vscodeBrowserDebugConfigName = "Attach Chrome (idx-web)"
@@ -291,6 +292,47 @@ final class SessionService: ObservableObject {
                 },
                 cleanupSessionArtifacts: { service, sessionID in
                     service.vscodeSnapshotManager.removeSessionState(paths: VSCodeRuntimePaths(sessionID: sessionID))
+                }
+            ),
+            NiriAppDescriptor(
+                id: NiriAppID.excalidraw,
+                displayName: "Excalidraw",
+                icon: "pencil.and.scribble",
+                menuSubtitle: "Run Excalidraw whiteboard in-canvas",
+                isVisibleInMenus: true,
+                supportsWebZoomPersistence: true,
+                startTile: { service, sessionID in
+                    service.niriAddSingletonAppRight(in: sessionID, appID: NiriAppID.excalidraw)
+                },
+                retryTile: { service, sessionID, itemID in
+                    service.retryNiriAppController(
+                        sessionID: sessionID,
+                        itemID: itemID,
+                        appID: NiriAppID.excalidraw
+                    )
+                },
+                stopTile: { service, itemID in
+                    service.stopNiriAppController(itemID: itemID, appID: NiriAppID.excalidraw)
+                },
+                ensureController: { service, sessionID, itemID in
+                    service.makeNiriExcalidrawController(sessionID: sessionID, itemID: itemID)
+                },
+                makeTileView: { service, sessionID, itemID in
+                    guard let controller: ExcalidrawTileController = service.niriAppController(
+                        for: sessionID,
+                        itemID: itemID,
+                        appID: NiriAppID.excalidraw,
+                        as: ExcalidrawTileController.self
+                    ) else {
+                        return AnyView(service.niriMissingAppTile(title: "Excalidraw Unavailable"))
+                    }
+                    return AnyView(
+                        NiriExcalidrawTile(sessionID: sessionID, itemID: itemID, controller: controller)
+                            .environmentObject(service)
+                    )
+                },
+                cleanupSessionArtifacts: { _, sessionID in
+                    ExcalidrawRuntimePaths(sessionID: sessionID).removeSessionArtifacts()
                 }
             )
         ])

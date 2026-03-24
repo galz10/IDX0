@@ -1,0 +1,10 @@
+{
+  "repositoryURL": "https://github.com/excalidraw/excalidraw.git",
+  "pinnedCommit": "d6f0f34fe91a7fab25106f2b31b074c132815d36",
+  "installCommand": "yarn install --frozen-lockfile",
+  "buildCommand": "yarn --cwd excalidraw-app build",
+  "entrypoint": "excalidraw-app/build/index.html",
+  "requiredArtifacts": [
+    "excalidraw-app/build/index.html"
+  ]
+}
