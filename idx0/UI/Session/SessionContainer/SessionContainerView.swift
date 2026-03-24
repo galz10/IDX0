@@ -15,8 +15,6 @@ struct SessionContainerView: View {
     @State var niriEdgeAutoScrollBySession: [UUID: NiriEdgeAutoScrollRuntime] = [:]
     @State var niriHoverActivateTaskBySession: [UUID: Task<Void, Never>] = [:]
     @State var niriHoverActivateTargetBySession: [UUID: UUID] = [:]
-    @State var niriColumnResizeTranslation: [NiriColumnResizeKey: CGFloat] = [:]
-    @State var niriItemResizeTranslation: [NiriItemResizeKey: CGFloat] = [:]
     @State var niriResizeVisualizerBySession: [UUID: NiriResizeVisualizerState] = [:]
     @State var niriQuickAddMenuPresented = false
     @State var niriWorkspaceSwitchOSD: String?

@@ -83,6 +83,99 @@ extension SessionContainerView {
         .offset(y: edge == .top ? -hitHeight / 2 : hitHeight / 2)
     }
 
+    func niriCornerResizeHotzone(
+        sessionID: UUID,
+        workspaceID: UUID,
+        columnID: UUID,
+        itemID: UUID,
+        metrics: NiriCanvasMetrics,
+        corner: NiriCornerPosition
+    ) -> some View {
+        let hitSize: CGFloat = 16
+        return NiriResizeCornerHandle(
+            corner: corner,
+            onBegin: {
+                niriStartCornerResizeVisualizer(
+                    sessionID: sessionID,
+                    workspaceID: workspaceID,
+                    columnID: columnID,
+                    itemID: itemID,
+                    corner: corner
+                )
+            },
+            onDelta: { deltaX, deltaY in
+                let columnDelta: CGFloat
+                switch corner {
+                case .topLeading, .bottomLeading:
+                    columnDelta = -deltaX
+                case .topTrailing, .bottomTrailing:
+                    columnDelta = deltaX
+                }
+                let itemDelta: CGFloat
+                switch corner {
+                case .topLeading, .topTrailing:
+                    itemDelta = deltaY   // NSView Y is flipped: dragging up = negative Y = shrink
+                case .bottomLeading, .bottomTrailing:
+                    itemDelta = -deltaY  // dragging down = negative Y in NSView = grow
+                }
+                niriApplyColumnResizeDelta(
+                    sessionID: sessionID,
+                    workspaceID: workspaceID,
+                    columnID: columnID,
+                    delta: columnDelta,
+                    metrics: metrics
+                )
+                niriApplyItemResizeDelta(
+                    sessionID: sessionID,
+                    workspaceID: workspaceID,
+                    columnID: columnID,
+                    itemID: itemID,
+                    delta: itemDelta,
+                    metrics: metrics
+                )
+            },
+            onEnd: {
+                niriClearResizeVisualizer(sessionID: sessionID)
+            }
+        )
+        .frame(width: hitSize, height: hitSize)
+        .contentShape(Rectangle())
+    }
+
+    func niriStartCornerResizeVisualizer(
+        sessionID: UUID,
+        workspaceID: UUID,
+        columnID: UUID,
+        itemID: UUID,
+        corner: NiriCornerPosition
+    ) {
+        // Use column visualizer since corner affects both width and height
+        let layout = sessionService.niriLayout(for: sessionID)
+        guard let workspace = layout.workspaces.first(where: { $0.id == workspaceID }),
+              let columnIndex = workspace.columns.firstIndex(where: { $0.id == columnID })
+        else { return }
+
+        let neighborColumnID: UUID?
+        switch corner {
+        case .topLeading, .bottomLeading:
+            neighborColumnID = columnIndex > 0 ? workspace.columns[columnIndex - 1].id : nil
+        case .topTrailing, .bottomTrailing:
+            neighborColumnID = columnIndex + 1 < workspace.columns.count ? workspace.columns[columnIndex + 1].id : nil
+        }
+
+        niriSetResizeVisualizer(
+            sessionID: sessionID,
+            state: NiriResizeVisualizerState(
+                kind: .column,
+                workspaceID: workspaceID,
+                primaryColumnID: columnID,
+                secondaryColumnID: neighborColumnID,
+                primaryItemID: itemID,
+                secondaryItemID: nil
+            )
+        )
+    }
+
     @ViewBuilder
     func niriInterColumnDropZone(
         sessionID: UUID,
@@ -315,56 +408,51 @@ extension SessionContainerView {
         rightColumn: NiriColumn,
         metrics: NiriCanvasMetrics
     ) -> some View {
-        let key = NiriColumnResizeKey(
-            sessionID: sessionID,
-            workspaceID: workspace.id,
-            leftColumnID: leftColumn.id,
-            rightColumnID: rightColumn.id
-        )
         let handleHeight = max(
             niriColumnContentHeight(column: leftColumn, metrics: metrics, isOverview: true),
             niriColumnContentHeight(column: rightColumn, metrics: metrics, isOverview: true)
         )
 
-        Rectangle()
-            .fill(Color.clear)
-            .frame(width: metrics.columnSpacing, height: handleHeight)
-            .overlay {
-                Rectangle()
-                    .fill(tc.divider.opacity(0.3))
-                    .frame(width: 1)
-            }
-            .overlay {
-                Capsule(style: .continuous)
-                    .fill(tc.divider.opacity(0.95))
-                    .frame(width: 3, height: max(24, min(56, handleHeight * 0.18)))
-            }
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        niriSetColumnResizeVisualizer(
-                            sessionID: sessionID,
-                            workspaceID: workspace.id,
-                            leftColumnID: leftColumn.id,
-                            rightColumnID: rightColumn.id
-                        )
-                        let last = niriColumnResizeTranslation[key] ?? 0
-                        let delta = value.translation.width - last
-                        niriColumnResizeTranslation[key] = value.translation.width
-                        niriApplyColumnResizeDelta(
-                            sessionID: sessionID,
-                            workspaceID: workspace.id,
-                            columnID: leftColumn.id,
-                            delta: delta,
-                            metrics: metrics
-                        )
-                    }
-                    .onEnded { _ in
-                        niriColumnResizeTranslation.removeValue(forKey: key)
-                        niriClearResizeVisualizer(sessionID: sessionID)
-                    }
+        ZStack {
+            Rectangle()
+                .fill(Color.clear)
+                .overlay {
+                    Rectangle()
+                        .fill(tc.divider.opacity(0.3))
+                        .frame(width: 1)
+                }
+                .overlay {
+                    Capsule(style: .continuous)
+                        .fill(tc.divider.opacity(0.95))
+                        .frame(width: 3, height: max(24, min(56, handleHeight * 0.18)))
+                }
+
+            NiriResizeEdgeHandle(
+                axis: .horizontal,
+                onBegin: {
+                    niriSetColumnResizeVisualizer(
+                        sessionID: sessionID,
+                        workspaceID: workspace.id,
+                        leftColumnID: leftColumn.id,
+                        rightColumnID: rightColumn.id
+                    )
+                },
+                onDelta: { delta in
+                    niriApplyColumnResizeDelta(
+                        sessionID: sessionID,
+                        workspaceID: workspace.id,
+                        columnID: leftColumn.id,
+                        delta: delta,
+                        metrics: metrics
+                    )
+                },
+                onEnd: {
+                    niriClearResizeVisualizer(sessionID: sessionID)
+                }
             )
+        }
+        .frame(width: metrics.columnSpacing, height: handleHeight)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -376,50 +464,45 @@ extension SessionContainerView {
         lowerItem: NiriLayoutItem,
         metrics: NiriCanvasMetrics
     ) -> some View {
-        let key = NiriItemResizeKey(
-            sessionID: sessionID,
-            workspaceID: workspace.id,
-            columnID: column.id,
-            upperItemID: upperItem.id,
-            lowerItemID: lowerItem.id
-        )
+        ZStack {
+            Rectangle()
+                .fill(Color.clear)
+                .overlay {
+                    Capsule(style: .continuous)
+                        .fill(tc.divider.opacity(0.95))
+                        .frame(width: 44, height: 3)
+                }
 
-        Rectangle()
-            .fill(Color.clear)
-            .frame(width: niriColumnWidth(column: column, metrics: metrics), height: metrics.itemSpacing)
-            .overlay {
-                Capsule(style: .continuous)
-                    .fill(tc.divider.opacity(0.95))
-                    .frame(width: 44, height: 3)
-            }
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        niriSetItemResizeVisualizer(
-                            sessionID: sessionID,
-                            workspaceID: workspace.id,
-                            columnID: column.id,
-                            primaryItemID: upperItem.id,
-                            secondaryItemID: lowerItem.id
-                        )
-                        let last = niriItemResizeTranslation[key] ?? 0
-                        let delta = value.translation.height - last
-                        niriItemResizeTranslation[key] = value.translation.height
-                        niriApplyItemResizeDelta(
-                            sessionID: sessionID,
-                            workspaceID: workspace.id,
-                            columnID: column.id,
-                            itemID: upperItem.id,
-                            delta: delta,
-                            metrics: metrics
-                        )
-                    }
-                    .onEnded { _ in
-                        niriItemResizeTranslation.removeValue(forKey: key)
-                        niriClearResizeVisualizer(sessionID: sessionID)
-                    }
+            NiriResizeEdgeHandle(
+                axis: .vertical,
+                onBegin: {
+                    niriSetItemResizeVisualizer(
+                        sessionID: sessionID,
+                        workspaceID: workspace.id,
+                        columnID: column.id,
+                        primaryItemID: upperItem.id,
+                        secondaryItemID: lowerItem.id
+                    )
+                },
+                onDelta: { delta in
+                    // NSView Y is flipped: positive delta = mouse moved up = shrink upper item
+                    // We want dragging down to grow the upper item, so negate
+                    niriApplyItemResizeDelta(
+                        sessionID: sessionID,
+                        workspaceID: workspace.id,
+                        columnID: column.id,
+                        itemID: upperItem.id,
+                        delta: -delta,
+                        metrics: metrics
+                    )
+                },
+                onEnd: {
+                    niriClearResizeVisualizer(sessionID: sessionID)
+                }
             )
+        }
+        .frame(width: niriColumnWidth(column: column, metrics: metrics), height: metrics.itemSpacing)
+        .contentShape(Rectangle())
     }
 
     func niriApplyColumnResizeDelta(

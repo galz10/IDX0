@@ -285,7 +285,11 @@ extension SessionContainerView {
         hasLowerItemNeighbor: Bool,
         isLastItemInColumn: Bool
     ) -> some View {
-        content
+        let hasTopEdge = column.displayMode == .normal && hasUpperItemNeighbor
+        let hasBottomEdge = column.displayMode == .normal && (hasLowerItemNeighbor || isLastItemInColumn)
+
+        return content
+            // Edge resize handles
             .overlay(alignment: .leading) {
                 if layout.isOverviewOpen, hasLeftColumnNeighbor {
                     niriColumnResizeEdgeHotzone(
@@ -309,7 +313,7 @@ extension SessionContainerView {
                 }
             }
             .overlay(alignment: .top) {
-                if layout.isOverviewOpen, column.displayMode == .normal, hasUpperItemNeighbor {
+                if layout.isOverviewOpen, hasTopEdge {
                     niriItemResizeEdgeHotzone(
                         sessionID: session.id,
                         workspaceID: workspace.id,
@@ -321,9 +325,7 @@ extension SessionContainerView {
                 }
             }
             .overlay(alignment: .bottom) {
-                if layout.isOverviewOpen,
-                   column.displayMode == .normal,
-                   hasLowerItemNeighbor || isLastItemInColumn {
+                if layout.isOverviewOpen, hasBottomEdge {
                     niriItemResizeEdgeHotzone(
                         sessionID: session.id,
                         workspaceID: workspace.id,
@@ -332,6 +334,59 @@ extension SessionContainerView {
                         metrics: metrics,
                         edge: .bottom
                     )
+                }
+            }
+            // Corner resize handles — allow simultaneous H+V resize
+            .overlay(alignment: .topLeading) {
+                if layout.isOverviewOpen, hasLeftColumnNeighbor, hasTopEdge {
+                    niriCornerResizeHotzone(
+                        sessionID: session.id,
+                        workspaceID: workspace.id,
+                        columnID: column.id,
+                        itemID: item.id,
+                        metrics: metrics,
+                        corner: .topLeading
+                    )
+                    .offset(x: -8, y: -8)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if layout.isOverviewOpen, hasRightColumnNeighbor, hasTopEdge {
+                    niriCornerResizeHotzone(
+                        sessionID: session.id,
+                        workspaceID: workspace.id,
+                        columnID: column.id,
+                        itemID: item.id,
+                        metrics: metrics,
+                        corner: .topTrailing
+                    )
+                    .offset(x: 8, y: -8)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                if layout.isOverviewOpen, hasLeftColumnNeighbor, hasBottomEdge {
+                    niriCornerResizeHotzone(
+                        sessionID: session.id,
+                        workspaceID: workspace.id,
+                        columnID: column.id,
+                        itemID: item.id,
+                        metrics: metrics,
+                        corner: .bottomLeading
+                    )
+                    .offset(x: -8, y: 8)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if layout.isOverviewOpen, hasRightColumnNeighbor, hasBottomEdge {
+                    niriCornerResizeHotzone(
+                        sessionID: session.id,
+                        workspaceID: workspace.id,
+                        columnID: column.id,
+                        itemID: item.id,
+                        metrics: metrics,
+                        corner: .bottomTrailing
+                    )
+                    .offset(x: 8, y: 8)
                 }
             }
     }

@@ -3,21 +3,6 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
-struct NiriColumnResizeKey: Hashable {
-    let sessionID: UUID
-    let workspaceID: UUID
-    let leftColumnID: UUID
-    let rightColumnID: UUID
-}
-
-struct NiriItemResizeKey: Hashable {
-    let sessionID: UUID
-    let workspaceID: UUID
-    let columnID: UUID
-    let upperItemID: UUID
-    let lowerItemID: UUID
-}
-
 struct NiriResizeVisualizerState: Equatable {
     enum Kind: Equatable {
         case column
@@ -126,6 +111,13 @@ struct NiriEdgeAutoScrollRuntime {
     var task: Task<Void, Never>
 }
 
+enum NiriCornerPosition {
+    case topLeading
+    case topTrailing
+    case bottomLeading
+    case bottomTrailing
+}
+
 struct NiriResizeEdgeHandle: NSViewRepresentable {
     enum Axis {
         case horizontal
@@ -206,6 +198,128 @@ final class NiriResizeEdgeNSView: NSView {
         dragStartInWindow = nil
         lastTranslation = 0
         onEnd?()
+    }
+}
+
+struct NiriResizeCornerHandle: NSViewRepresentable {
+    let corner: NiriCornerPosition
+    var onBegin: (() -> Void)? = nil
+    let onDelta: (CGFloat, CGFloat) -> Void
+    var onEnd: (() -> Void)? = nil
+
+    func makeNSView(context: Context) -> NiriResizeCornerNSView {
+        let view = NiriResizeCornerNSView()
+        view.corner = corner
+        view.onBegin = onBegin
+        view.onDelta = onDelta
+        view.onEnd = onEnd
+        return view
+    }
+
+    func updateNSView(_ nsView: NiriResizeCornerNSView, context: Context) {
+        nsView.corner = corner
+        nsView.onBegin = onBegin
+        nsView.onDelta = onDelta
+        nsView.onEnd = onEnd
+        nsView.needsDisplay = true
+        nsView.discardCursorRects()
+        nsView.resetCursorRects()
+    }
+}
+
+final class NiriResizeCornerNSView: NSView {
+    var corner: NiriCornerPosition = .bottomTrailing
+    var onBegin: (() -> Void)?
+    var onDelta: ((CGFloat, CGFloat) -> Void)?
+    var onEnd: (() -> Void)?
+
+    private var dragStartInWindow: NSPoint?
+    private var lastTranslationX: CGFloat = 0
+    private var lastTranslationY: CGFloat = 0
+
+    override var acceptsFirstResponder: Bool { true }
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func resetCursorRects() {
+        let cursor: NSCursor
+        switch corner {
+        case .topLeading, .bottomTrailing:
+            // NW-SE diagonal — use the standard frameResize cursor
+            cursor = NSCursor(image: Self.diagonalCursorImage(nwse: true), hotSpot: NSPoint(x: 8, y: 8))
+        case .topTrailing, .bottomLeading:
+            // NE-SW diagonal
+            cursor = NSCursor(image: Self.diagonalCursorImage(nwse: false), hotSpot: NSPoint(x: 8, y: 8))
+        }
+        addCursorRect(bounds, cursor: cursor)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        dragStartInWindow = event.locationInWindow
+        lastTranslationX = 0
+        lastTranslationY = 0
+        onBegin?()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let dragStartInWindow else { return }
+        let current = event.locationInWindow
+        let translationX = current.x - dragStartInWindow.x
+        let translationY = current.y - dragStartInWindow.y
+        let deltaX = translationX - lastTranslationX
+        let deltaY = translationY - lastTranslationY
+        lastTranslationX = translationX
+        lastTranslationY = translationY
+        guard abs(deltaX) > 0.01 || abs(deltaY) > 0.01 else { return }
+        onDelta?(deltaX, deltaY)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        _ = event
+        dragStartInWindow = nil
+        lastTranslationX = 0
+        lastTranslationY = 0
+        onEnd?()
+    }
+
+    private static func diagonalCursorImage(nwse: Bool) -> NSImage {
+        let size = NSSize(width: 16, height: 16)
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSColor.black.withAlphaComponent(0.9).setStroke()
+            let path = NSBezierPath()
+            path.lineWidth = 1.5
+            path.lineCapStyle = .round
+            if nwse {
+                // NW-SE: top-left to bottom-right
+                path.move(to: NSPoint(x: 2, y: rect.maxY - 2))
+                path.line(to: NSPoint(x: rect.maxX - 2, y: 2))
+                // Arrowheads
+                path.move(to: NSPoint(x: 2, y: rect.maxY - 2))
+                path.line(to: NSPoint(x: 6, y: rect.maxY - 2))
+                path.move(to: NSPoint(x: 2, y: rect.maxY - 2))
+                path.line(to: NSPoint(x: 2, y: rect.maxY - 6))
+                path.move(to: NSPoint(x: rect.maxX - 2, y: 2))
+                path.line(to: NSPoint(x: rect.maxX - 6, y: 2))
+                path.move(to: NSPoint(x: rect.maxX - 2, y: 2))
+                path.line(to: NSPoint(x: rect.maxX - 2, y: 6))
+            } else {
+                // NE-SW: top-right to bottom-left
+                path.move(to: NSPoint(x: rect.maxX - 2, y: rect.maxY - 2))
+                path.line(to: NSPoint(x: 2, y: 2))
+                // Arrowheads
+                path.move(to: NSPoint(x: rect.maxX - 2, y: rect.maxY - 2))
+                path.line(to: NSPoint(x: rect.maxX - 6, y: rect.maxY - 2))
+                path.move(to: NSPoint(x: rect.maxX - 2, y: rect.maxY - 2))
+                path.line(to: NSPoint(x: rect.maxX - 2, y: rect.maxY - 6))
+                path.move(to: NSPoint(x: 2, y: 2))
+                path.line(to: NSPoint(x: 6, y: 2))
+                path.move(to: NSPoint(x: 2, y: 2))
+                path.line(to: NSPoint(x: 2, y: 6))
+            }
+            path.stroke()
+            return true
+        }
+        return image
     }
 }
 
