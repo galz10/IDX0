@@ -627,12 +627,15 @@ final class VSCodeTileController: ObservableObject, NiriAppTileRuntimeControllin
     private let requiredExtensionIDs = ["ms-python.python"]
     private let minimumZoom: CGFloat = 0.5
     private let maximumZoom: CGFloat = 3.0
+    private let maxWebContentReloadAttempts = 2
 
     private var startTask: Task<Void, Never>?
     private var process: Process?
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
     private var logHandle: FileHandle?
+    private var webViewDelegate: EmbeddedWebViewDelegate?
+    private var webContentTerminationCount = 0
     private var userStopped = false
     private var automaticRestartCount = 0
 
@@ -662,9 +665,16 @@ final class VSCodeTileController: ObservableObject, NiriAppTileRuntimeControllin
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
         webView = WKWebView(frame: .zero, configuration: configuration)
+
         let zoomSeedPath = profileSeedPathProvider() ?? FileManager.default.homeDirectoryForCurrentUser.path
         zoomDefaultsKey = Self.zoomDefaultsKey(for: zoomSeedPath)
         webView.pageZoom = loadPersistedZoom()
+
+        let delegate = EmbeddedWebViewDelegate(logLabel: "VSCode[\(sessionID.uuidString)]") { [weak self] view in
+            self?.handleWebContentTermination(view)
+        }
+        webView.navigationDelegate = delegate
+        webViewDelegate = delegate
     }
 
     func ensureStarted() {
@@ -696,6 +706,7 @@ final class VSCodeTileController: ObservableObject, NiriAppTileRuntimeControllin
         startTask?.cancel()
         startTask = nil
         terminateProcess()
+        webContentTerminationCount = 0
         state = .idle
     }
 
@@ -811,6 +822,7 @@ final class VSCodeTileController: ObservableObject, NiriAppTileRuntimeControllin
         }
 
         let url = URL(string: "http://127.0.0.1:\(port)")!
+        webContentTerminationCount = 0
         webView.load(URLRequest(url: url))
         state = .live(urlString: url.absoluteString)
         appendRuntimeLog("runtime live at \(url.absoluteString)")
@@ -1101,6 +1113,27 @@ final class VSCodeTileController: ObservableObject, NiriAppTileRuntimeControllin
         }
 
         appendLogData(data)
+    }
+
+    private func handleWebContentTermination(_ webView: WKWebView) {
+        webContentTerminationCount += 1
+        appendRuntimeLog("web content terminated count=\(webContentTerminationCount)")
+
+        guard case .live(let urlString) = state,
+              let url = URL(string: urlString) else {
+            return
+        }
+
+        if webContentTerminationCount <= maxWebContentReloadAttempts {
+            appendRuntimeLog("reloading embedded content after WebContent termination")
+            webView.load(URLRequest(url: url))
+            return
+        }
+
+        state = .failed(
+            message: "Embedded browser process crashed repeatedly. Open logs for details.",
+            logPath: paths.runtimeLogPath.path
+        )
     }
 
     private func loadPersistedZoom() -> CGFloat {

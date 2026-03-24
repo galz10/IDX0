@@ -561,12 +561,15 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
     private let maxAutomaticRestarts = 3
     private let minimumZoom: CGFloat = 0.5
     private let maximumZoom: CGFloat = 3.0
+    private let maxWebContentReloadAttempts = 2
 
     private var startTask: Task<Void, Never>?
     private var process: Process?
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
     private var logHandle: FileHandle?
+    private var webViewDelegate: EmbeddedWebViewDelegate?
+    private var webContentTerminationCount = 0
     private var userStopped = false
     private var automaticRestartCount = 0
 
@@ -590,6 +593,12 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
         webView = WKWebView(frame: .zero, configuration: configuration)
+
+        let delegate = EmbeddedWebViewDelegate(logLabel: "T3Code[\(sessionID.uuidString)]") { [weak self] view in
+            self?.handleWebContentTermination(view)
+        }
+        webView.navigationDelegate = delegate
+        webViewDelegate = delegate
     }
 
     func ensureStarted() {
@@ -621,6 +630,7 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         startTask?.cancel()
         startTask = nil
         terminateProcess()
+        webContentTerminationCount = 0
         state = .idle
     }
 
@@ -717,6 +727,7 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         }
 
         let url = URL(string: "http://127.0.0.1:\(port)")!
+        webContentTerminationCount = 0
         webView.load(URLRequest(url: url))
         state = .live(urlString: url.absoluteString)
         appendRuntimeLog("runtime live at \(url.absoluteString)")
@@ -808,14 +819,31 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
             "--auto-bootstrap-project-from-cwd"
         ]
 
+        var runtimePathDirectories: [String] = []
         if let nodeExecutable = resolveRuntimeExecutablePath("node") {
             process.executableURL = URL(fileURLWithPath: nodeExecutable)
             process.arguments = runtimeArguments
             appendRuntimeLog("resolved node executable: \(nodeExecutable)")
+            runtimePathDirectories.append(
+                URL(fileURLWithPath: nodeExecutable, isDirectory: false)
+                    .deletingLastPathComponent()
+                    .path
+            )
         } else {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = ["node"] + runtimeArguments
             appendRuntimeLog("node resolution fallback: using /usr/bin/env node")
+        }
+
+        if let codexExecutable = resolveRuntimeExecutablePath("codex") {
+            appendRuntimeLog("resolved codex executable: \(codexExecutable)")
+            runtimePathDirectories.append(
+                URL(fileURLWithPath: codexExecutable, isDirectory: false)
+                    .deletingLastPathComponent()
+                    .path
+            )
+        } else {
+            appendRuntimeLog("codex executable not resolved during launch; relying on inherited PATH")
         }
 
         var env = ProcessInfo.processInfo.environment
@@ -824,6 +852,9 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         env["T3CODE_PORT"] = String(port)
         env["T3CODE_STATE_DIR"] = stateDirectory.path
         env["T3CODE_NO_BROWSER"] = "1"
+        if !runtimePathDirectories.isEmpty {
+            env["PATH"] = mergedPath(prepending: runtimePathDirectories, existingPath: env["PATH"])
+        }
 
         if let isolatedZdotDir = prepareIsolatedZdotDir() {
             env["ZDOTDIR"] = isolatedZdotDir.path
@@ -920,6 +951,23 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         }
 
         return nil
+    }
+
+    private func mergedPath(prepending directories: [String], existingPath: String?) -> String {
+        var combined: [String] = directories
+        if let existingPath {
+            combined.append(contentsOf: existingPath.split(separator: ":").map(String.init))
+        }
+
+        var seen: Set<String> = []
+        var unique: [String] = []
+        for directory in combined {
+            guard !directory.isEmpty else { continue }
+            if seen.insert(directory).inserted {
+                unique.append(directory)
+            }
+        }
+        return unique.joined(separator: ":")
     }
 
     private func prepareIsolatedZdotDir() -> URL? {
@@ -1048,6 +1096,27 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         }
 
         appendLogData(data)
+    }
+
+    private func handleWebContentTermination(_ webView: WKWebView) {
+        webContentTerminationCount += 1
+        appendRuntimeLog("web content terminated count=\(webContentTerminationCount)")
+
+        guard case .live(let urlString) = state,
+              let url = URL(string: urlString) else {
+            return
+        }
+
+        if webContentTerminationCount <= maxWebContentReloadAttempts {
+            appendRuntimeLog("reloading embedded content after WebContent termination")
+            webView.load(URLRequest(url: url))
+            return
+        }
+
+        state = .failed(
+            message: "Embedded browser process crashed repeatedly. Open logs for details.",
+            logPath: paths.runtimeLogPath.path
+        )
     }
 
     private func isRetryableStartupError(_ error: Error) -> Bool {

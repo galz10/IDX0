@@ -70,6 +70,7 @@ struct InlineSettingsView: View {
                     .foregroundStyle(tc.tertiaryText)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
+                    .idxHitTarget(size: HitTargetSize.dense, alignment: .leading)
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 10)
@@ -153,6 +154,7 @@ struct InlineSettingsView: View {
                     }
                 }
             )
+            .idxFullWidthHitRow()
         }
         .buttonStyle(.plain)
     }

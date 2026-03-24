@@ -26,6 +26,37 @@ extension SessionService {
         return URL(fileURLWithPath: NSString(string: trimmed).expandingTildeInPath).standardizedFileURL.path
     }
 
+    func expandedTerminalStartupCommand(
+        for sessionID: UUID,
+        launchDirectory: String
+    ) -> String? {
+        guard let template = settings.terminalStartupCommandTemplate?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !template.isEmpty
+        else {
+            return nil
+        }
+
+        let escapedWorkdir = GhosttyAppHost.shellEscapedCommand(launchDirectory)
+        return template
+            .replacingOccurrences(of: "${WORKDIR}", with: escapedWorkdir)
+            .replacingOccurrences(of: "${SESSION_ID}", with: sessionID.uuidString)
+    }
+
+    func queueTerminalStartupCommandIfNeeded(
+        controller: TerminalSessionController,
+        ownerSessionID: UUID,
+        launchDirectory: String
+    ) {
+        guard let command = expandedTerminalStartupCommand(
+            for: ownerSessionID,
+            launchDirectory: launchDirectory
+        ) else {
+            return
+        }
+        controller.send(text: command + "\n")
+    }
+
     func normalizedURL(from value: String) -> URL? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }

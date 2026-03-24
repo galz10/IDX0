@@ -22,7 +22,7 @@ Core directories:
 - `idx0/Persistence`: file-backed stores
 - `idx0/Terminal`: Ghostty host/surfaces/session controllers
 - `idx0/UI`: SwiftUI views and overlays
-- `idx0/Apps`: Niri app tile runtimes (`t3-code`, `vscode`)
+- `idx0/Apps`: Niri app tile runtimes (`t3-code`, `vscode`, `opencode`)
 - `idx0/Keyboard`: shortcut models, registry, dispatch, validation
 - `Sources/IPCShared`: shared IPC contract constants/types
 - `Sources/idx0`: CLI client for IPC control

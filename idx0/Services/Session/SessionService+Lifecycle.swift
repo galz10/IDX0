@@ -404,6 +404,11 @@ extension SessionService {
             shellPath: shellPath,
             host: host
         )
+        queueTerminalStartupCommandIfNeeded(
+            controller: newController,
+            ownerSessionID: sessionID,
+            launchDirectory: launchDir
+        )
         wireControllerCallbacks(newController, sessionID: sessionID)
         runtimeControllers[newControllerID] = newController
         ownerSessionIDByControllerID[newControllerID] = sessionID

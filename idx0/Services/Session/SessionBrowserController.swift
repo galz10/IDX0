@@ -4,6 +4,53 @@ import SwiftUI
 import WebKit
 
 @MainActor
+final class EmbeddedWebViewDelegate: NSObject, WKNavigationDelegate {
+    private let logLabel: String
+    private let onProcessTermination: ((WKWebView) -> Void)?
+
+    init(
+        logLabel: String,
+        onProcessTermination: ((WKWebView) -> Void)? = nil
+    ) {
+        self.logLabel = logLabel
+        self.onProcessTermination = onProcessTermination
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+    ) {
+        guard navigationAction.navigationType == .linkActivated,
+              let url = navigationAction.request.url,
+              shouldOpenExternally(url),
+              navigationAction.targetFrame?.isMainFrame != false else {
+            decisionHandler(.allow)
+            return
+        }
+
+        Logger.info("\(logLabel): opening external URL \(url.absoluteString)")
+        NSWorkspace.shared.open(url)
+        decisionHandler(.cancel)
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        Logger.warning("\(logLabel): WebContent process terminated")
+        onProcessTermination?(webView)
+    }
+
+    private func shouldOpenExternally(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        switch scheme {
+        case "http", "https", "about", "data", "file", "blob":
+            return false
+        default:
+            return true
+        }
+    }
+}
+
+@MainActor
 final class SessionBrowserController: NSObject, ObservableObject, WKNavigationDelegate {
     private static var chromeCookieHydrationTask: Task<Void, Never>?
     private static var hasHydratedChromeCookies = false
@@ -28,6 +75,8 @@ final class SessionBrowserController: NSObject, ObservableObject, WKNavigationDe
     private var isBootstrapComplete = false
     private var pendingLoadURLString: String?
     private var kvoObservations: [NSKeyValueObservation] = []
+    private var webContentTerminationCount = 0
+    private let maxWebContentReloadAttempts = 2
 
     init(initialURL: String?) {
         let config = WKWebViewConfiguration()
@@ -159,8 +208,28 @@ final class SessionBrowserController: NSObject, ObservableObject, WKNavigationDe
 
     // MARK: - WKNavigationDelegate
 
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+    ) {
+        _ = webView
+        guard navigationAction.navigationType == .linkActivated,
+              let url = navigationAction.request.url,
+              shouldOpenExternally(url),
+              navigationAction.targetFrame?.isMainFrame != false else {
+            decisionHandler(.allow)
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+        decisionHandler(.cancel)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         _ = navigation
+        _ = webView
+        webContentTerminationCount = 0
         navigationError = nil
         setCurrentURL(webView.url?.absoluteString)
         recordHistoryIfNeeded()
@@ -168,6 +237,7 @@ final class SessionBrowserController: NSObject, ObservableObject, WKNavigationDe
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         _ = navigation
+        _ = webView
         navigationError = nil
         setCurrentURL(webView.url?.absoluteString)
     }
@@ -182,9 +252,31 @@ final class SessionBrowserController: NSObject, ObservableObject, WKNavigationDe
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         _ = navigation
+        _ = webView
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return }
         navigationError = error.localizedDescription
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        webContentTerminationCount += 1
+        Logger.warning("Session browser WebContent terminated count=\(webContentTerminationCount)")
+
+        guard webContentTerminationCount <= maxWebContentReloadAttempts else {
+            navigationError = "Embedded browser crashed repeatedly. Use Reload or Open in Default Browser."
+            return
+        }
+
+        navigationError = "Embedded browser process restarted. Reloading..."
+        if webView.url != nil {
+            webView.reload()
+            return
+        }
+
+        if pendingLoadURLString == nil {
+            pendingLoadURLString = currentURLString
+        }
+        flushPendingLoad()
     }
 
     private func recordHistoryIfNeeded() {
@@ -196,6 +288,16 @@ final class SessionBrowserController: NSObject, ObservableObject, WKNavigationDe
     private func setCurrentURL(_ value: String?) {
         currentURLString = value
         onURLChanged?(value)
+    }
+
+    private func shouldOpenExternally(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        switch scheme {
+        case "http", "https", "about", "data", "file", "blob":
+            return false
+        default:
+            return true
+        }
     }
 
     func normalizeURL(_ value: String?) -> URL? {

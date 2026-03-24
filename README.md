@@ -4,7 +4,7 @@
 
 `IDX0` is a native macOS app for running and supervising multiple coding sessions in one place.
 
-Think of it as a mission-control workspace for development: each session has its own terminal context, and you can add tools like a browser or VS Code inside the same canvas.
+Think of it as a mission-control workspace for development: each session has its own terminal context, and you can add tools like a browser, VS Code, or OpenCode inside the same canvas.
 
 ## Overview
 
@@ -41,7 +41,7 @@ Workspace with an embedded browser tile:
 ## How People Use IDX0
 
 1. Create a session for a task (quick terminal, repo session, or worktree session).
-2. Open the tools you need in that session (terminal, browser, VS Code, and other tiles).
+2. Open the tools you need in that session (terminal, browser, VS Code, OpenCode, and other tiles).
 3. Run an agent CLI and keep working while IDX0 tracks session activity.
 4. Save a checkpoint before major changes, then request review or create a handoff.
 5. Return later and continue from the same layout and session context.

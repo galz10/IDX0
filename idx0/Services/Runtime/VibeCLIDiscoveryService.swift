@@ -4,15 +4,18 @@ struct VibeCLIDiscoveryService {
     private let environment: [String: String]
     private let fileManager: FileManager
     private let shellLookup: (String) -> String?
+    private let homeDirectory: String
 
     init(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default,
-        shellLookup: ((String) -> String?)? = nil
+        shellLookup: ((String) -> String?)? = nil,
+        homeDirectory: String = NSHomeDirectory()
     ) {
         self.environment = environment
         self.fileManager = fileManager
         self.shellLookup = shellLookup ?? { _ in nil }
+        self.homeDirectory = homeDirectory
     }
 
     func discoverInstalledTools() -> [VibeCLITool] {
@@ -83,8 +86,8 @@ struct VibeCLIDiscoveryService {
     }
 
     private func defaultPathDirectories() -> [String] {
-        let home = NSHomeDirectory()
-        return [
+        let home = homeDirectory
+        var directories = [
             "/opt/homebrew/bin",
             "/usr/local/bin",
             "/usr/bin",
@@ -101,6 +104,34 @@ struct VibeCLIDiscoveryService {
             "\(home)/.config/yarn/global/node_modules/.bin",
             "\(home)/.nvm/versions/node/current/bin"
         ]
+        directories.append(contentsOf: nvmVersionBinDirectories(home: home))
+        return directories
+    }
+
+    private func nvmVersionBinDirectories(home: String) -> [String] {
+        let root = URL(fileURLWithPath: home, isDirectory: true)
+            .appendingPathComponent(".nvm/versions/node", isDirectory: true)
+        guard let versions = try? fileManager.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return versions
+            .filter { url in
+                var isDirectory: ObjCBool = false
+                return fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+            }
+            .map { $0.appendingPathComponent("bin", isDirectory: true).path }
+            .filter { directory in
+                var isDirectory: ObjCBool = false
+                return fileManager.fileExists(atPath: directory, isDirectory: &isDirectory) && isDirectory.boolValue
+            }
+            .sorted { lhs, rhs in
+                lhs.localizedStandardCompare(rhs) == .orderedDescending
+            }
     }
 
     private func shellPathDirectories() -> [String] {
