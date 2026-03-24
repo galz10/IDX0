@@ -44,6 +44,8 @@ struct NiriTileSpotlight: View {
     /// Blocks mouse interaction briefly after appearing so the scroll view
     /// doesn't steal events when the cursor happens to sit over it.
     @State private var interactionReady = false
+    @State private var lastSelectionSource: SelectionSource = .keyboard
+    private enum SelectionSource { case keyboard, hover }
 
     private var filtered: [TileSpotlightItem] {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -127,6 +129,7 @@ struct NiriTileSpotlight: View {
                                             }
                                             .onHover { hovering in
                                                 guard interactionReady, hovering else { return }
+                                                lastSelectionSource = .hover
                                                 selectedIndex = globalIndex
                                             }
                                     }
@@ -142,6 +145,7 @@ struct NiriTileSpotlight: View {
                                         }
                                         .onHover { hovering in
                                             guard interactionReady, hovering else { return }
+                                            lastSelectionSource = .hover
                                             selectedIndex = index
                                         }
                                 }
@@ -153,6 +157,7 @@ struct NiriTileSpotlight: View {
                     .scrollIndicators(.hidden)
                     .scrollDisabled(!interactionReady)
                     .onChange(of: selectedIndex) { _, newValue in
+                        guard lastSelectionSource == .keyboard else { return }
                         if let item = filtered.dropFirst(newValue).first {
                             withAnimation(.easeOut(duration: 0.08)) {
                                 proxy.scrollTo(item.id, anchor: .center)
@@ -277,6 +282,7 @@ struct NiriTileSpotlight: View {
     private func moveSelection(_ delta: Int) {
         let max = filtered.count - 1
         guard max >= 0 else { return }
+        lastSelectionSource = .keyboard
         selectedIndex = min(max, Swift.max(0, selectedIndex + delta))
     }
 

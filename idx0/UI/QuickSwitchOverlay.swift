@@ -10,6 +10,8 @@ struct QuickSwitchOverlay: View {
     @State private var query = ""
     @State private var selectedIndex = 0
     @State private var hoverReady = false
+    @State private var lastSelectionSource: SelectionSource = .keyboard
+    private enum SelectionSource { case keyboard, hover }
 
     var body: some View {
         ZStack {
@@ -67,6 +69,7 @@ struct QuickSwitchOverlay: View {
                                         }
                                         .onHover { hovering in
                                             guard hoverReady, hovering else { return }
+                                            lastSelectionSource = .hover
                                             selectedIndex = index
                                         }
                                 }
@@ -76,6 +79,7 @@ struct QuickSwitchOverlay: View {
                         .frame(maxHeight: 340)
                         .scrollIndicators(.hidden)
                         .onChange(of: selectedIndex) { _, newValue in
+                            guard lastSelectionSource == .keyboard else { return }
                             if let session = filteredSessions.prefix(10).dropFirst(newValue).first {
                                 withAnimation(.easeOut(duration: 0.08)) {
                                     proxy.scrollTo(session.id, anchor: .center)
@@ -224,6 +228,7 @@ struct QuickSwitchOverlay: View {
     private func moveSelection(_ delta: Int) {
         let max = min(filteredSessions.count, 10) - 1
         guard max >= 0 else { return }
+        lastSelectionSource = .keyboard
         selectedIndex = min(max, Swift.max(0, selectedIndex + delta))
     }
 

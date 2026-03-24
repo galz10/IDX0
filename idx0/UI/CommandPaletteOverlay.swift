@@ -10,6 +10,8 @@ struct CommandPaletteOverlay: View {
     @State private var query = ""
     @State private var selectedIndex = 0
     @State private var hoverReady = false
+    @State private var lastSelectionSource: SelectionSource = .keyboard
+    private enum SelectionSource { case keyboard, hover }
 
     var body: some View {
         ZStack {
@@ -69,6 +71,7 @@ struct CommandPaletteOverlay: View {
                                         }
                                         .onHover { hovering in
                                             guard hoverReady, hovering, action.isEnabled else { return }
+                                            lastSelectionSource = .hover
                                             selectedIndex = index
                                         }
                                 }
@@ -78,6 +81,7 @@ struct CommandPaletteOverlay: View {
                         .frame(maxHeight: 360)
                         .scrollIndicators(.hidden)
                         .onChange(of: selectedIndex) { _, newValue in
+                            guard lastSelectionSource == .keyboard else { return }
                             if let action = filteredActions.prefix(12).dropFirst(newValue).first {
                                 withAnimation(.easeOut(duration: 0.08)) {
                                     proxy.scrollTo(action.id, anchor: .center)
@@ -177,6 +181,7 @@ struct CommandPaletteOverlay: View {
     private func moveSelection(_ delta: Int) {
         let max = min(filteredActions.count, 12) - 1
         guard max >= 0 else { return }
+        lastSelectionSource = .keyboard
         selectedIndex = min(max, Swift.max(0, selectedIndex + delta))
     }
 
