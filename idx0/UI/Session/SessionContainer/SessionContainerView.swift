@@ -61,6 +61,34 @@ struct SessionContainerView: View {
             }
         }
         .animation(.easeOut(duration: 0.12), value: sessionService.selectedSessionID)
+        .onChange(of: sessionService.selectedSessionID) { _, _ in
+            niriQuickAddMenuPresented = false
+        }
+        .onChange(of: sessionService.settings.niriCanvasEnabled) { _, enabled in
+            if !enabled {
+                niriQuickAddMenuPresented = false
+            }
+        }
+        .onChange(of: coordinator.showingSettings) { _, showing in
+            if showing {
+                niriQuickAddMenuPresented = false
+            }
+        }
+        .onChange(of: coordinator.showingCommandPalette) { _, showing in
+            if showing {
+                niriQuickAddMenuPresented = false
+            }
+        }
+        .onChange(of: coordinator.showingQuickSwitch) { _, showing in
+            if showing {
+                niriQuickAddMenuPresented = false
+            }
+        }
+        .onChange(of: coordinator.showingRenameSessionSheet) { _, showing in
+            if showing {
+                niriQuickAddMenuPresented = false
+            }
+        }
     }
 
 }

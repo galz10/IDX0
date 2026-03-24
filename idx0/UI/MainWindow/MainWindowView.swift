@@ -1,6 +1,10 @@
 import AppKit
 import SwiftUI
 
+extension Notification.Name {
+    static let niriSpotlightDismissRequested = Notification.Name("niriSpotlightDismissRequested")
+}
+
 struct MainWindowView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @EnvironmentObject private var sessionService: SessionService
@@ -29,6 +33,7 @@ struct MainWindowView: View {
                         SessionSidebarView()
                             .frame(width: sidebarWidth)
                             .transition(.move(edge: .leading))
+                            .simultaneousGesture(TapGesture().onEnded { requestNiriSpotlightDismissal() })
 
                         SidebarResizeHandle(width: $sidebarWidth, min: Self.minSidebarWidth, max: Self.maxSidebarWidth)
                     }
@@ -39,6 +44,7 @@ struct MainWindowView: View {
                             .transaction { t in t.animation = nil }
 
                         TabBarOverlay()
+                            .simultaneousGesture(TapGesture().onEnded { requestNiriSpotlightDismissal() })
                     }
 
                     if coordinator.showingCheckpoints {
@@ -47,6 +53,7 @@ struct MainWindowView: View {
                         CheckpointsSidebar()
                             .frame(width: checkpointsWidth)
                             .transition(.move(edge: .trailing))
+                            .simultaneousGesture(TapGesture().onEnded { requestNiriSpotlightDismissal() })
                     }
                 }
             }
@@ -130,5 +137,8 @@ struct MainWindowView: View {
             coordinator.showingNiriOnboarding = true
         }
     }
-}
 
+    private func requestNiriSpotlightDismissal() {
+        NotificationCenter.default.post(name: .niriSpotlightDismissRequested, object: nil)
+    }
+}

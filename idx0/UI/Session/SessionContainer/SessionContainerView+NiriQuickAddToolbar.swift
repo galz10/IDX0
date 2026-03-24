@@ -158,116 +158,298 @@ extension SessionContainerView {
         }
 
         // -- Commands section --
+        let selected = sessionService.selectedSession
+        let selectedID = selected?.id
+        let hasWorktree = selected?.worktreePath != nil
+        let showsVibe = sessionService.settings.appMode.showsVibeFeatures
 
-        items.append(TileSpotlightItem(
-            id: "cmd-new-session",
+        func appendCommand(
+            id: String,
+            icon: String,
+            title: String,
+            subtitle: String,
+            searchText: String,
+            shortcutAction: ShortcutActionID? = nil,
+            run: @escaping () -> Void
+        ) {
+            items.append(TileSpotlightItem(
+                id: id,
+                icon: icon,
+                title: title,
+                subtitle: subtitle,
+                searchText: searchText,
+                shortcut: shortcutAction.flatMap { shortcutLabel($0) },
+                section: .commands,
+                run: run
+            ))
+        }
+
+        appendCommand(
+            id: "cmd-new-quick-session",
             icon: "plus.circle",
             title: "New Quick Session",
             subtitle: "Create an instant terminal session",
             searchText: "new quick session instant terminal",
-            shortcut: shortcutLabel(.newQuickSession),
-            section: .commands,
+            shortcutAction: .newQuickSession,
             run: { _ = self.coordinator.performCommand(.newQuickSession) }
-        ))
-
-        items.append(TileSpotlightItem(
+        )
+        appendCommand(
+            id: "cmd-new-repo-session",
+            icon: "folder",
+            title: "New Repo/Worktree Session",
+            subtitle: "Open structured setup for repo or worktree",
+            searchText: "new repo worktree structured session setup",
+            shortcutAction: .newRepoWorktreeSession,
+            run: { _ = self.coordinator.performCommand(.newRepoWorktreeSession) }
+        )
+        appendCommand(
             id: "cmd-switch-session",
             icon: "arrow.left.arrow.right",
             title: "Quick Switch Session",
             subtitle: "Jump to a session by name",
             searchText: "switch session jump focus quick",
-            shortcut: shortcutLabel(.quickSwitchSession),
-            section: .commands,
+            shortcutAction: .quickSwitchSession,
             run: { _ = self.coordinator.performCommand(.quickSwitchSession) }
-        ))
-
-        items.append(TileSpotlightItem(
-            id: "cmd-overview",
-            icon: "square.grid.3x3",
-            title: "Toggle Overview",
-            subtitle: "Bird's-eye view of all tiles",
-            searchText: "overview toggle canvas workspaces bird eye",
-            shortcut: shortcutLabel(.niriToggleOverview),
-            section: .commands,
-            run: { _ = self.coordinator.performCommand(.niriToggleOverview) }
-        ))
-
-        items.append(TileSpotlightItem(
-            id: "cmd-close-tile",
-            icon: "xmark.rectangle",
-            title: "Close Tile",
-            subtitle: "Close the focused tile",
-            searchText: "close tile pane remove",
-            shortcut: shortcutLabel(.closePane),
-            section: .commands,
-            run: { _ = self.coordinator.performCommand(.closePane) }
-        ))
-
-        items.append(TileSpotlightItem(
-            id: "cmd-toggle-sidebar",
-            icon: "sidebar.left",
-            title: "Toggle Sidebar",
-            subtitle: "Show or hide the sidebar",
-            searchText: "toggle sidebar show hide",
-            shortcut: shortcutLabel(.toggleSidebar),
-            section: .commands,
-            run: { _ = self.coordinator.performCommand(.toggleSidebar) }
-        ))
-
-        items.append(TileSpotlightItem(
-            id: "cmd-settings",
-            icon: "gear",
-            title: "Open Settings",
-            subtitle: "Open IDX0 preferences",
-            searchText: "settings preferences open",
-            shortcut: shortcutLabel(.openSettings),
-            section: .commands,
-            run: { _ = self.coordinator.performCommand(.openSettings) }
-        ))
-
-        items.append(TileSpotlightItem(
-            id: "cmd-shortcuts",
-            icon: "keyboard",
-            title: "Keyboard Shortcuts",
-            subtitle: "View all keyboard shortcuts",
-            searchText: "keyboard shortcuts help keys bindings",
-            shortcut: shortcutLabel(.keyboardShortcuts),
-            section: .commands,
-            run: { _ = self.coordinator.performCommand(.keyboardShortcuts) }
-        ))
-
-        items.append(TileSpotlightItem(
+        )
+        appendCommand(
             id: "cmd-rename",
             icon: "pencil",
             title: "Rename Session",
             subtitle: "Change the title of the current session",
             searchText: "rename session title",
-            shortcut: shortcutLabel(.renameSession),
-            section: .commands,
+            shortcutAction: .renameSession,
             run: { _ = self.coordinator.performCommand(.renameSession) }
-        ))
-
-        items.append(TileSpotlightItem(
-            id: "cmd-snap",
-            icon: "dot.scope",
-            title: "Toggle Snap",
-            subtitle: sessionService.settings.niri.snapEnabled ? "Disable snap" : "Enable velocity-based snap",
-            searchText: "snap toggle velocity free pan",
-            shortcut: shortcutLabel(.niriToggleSnap),
-            section: .commands,
-            run: { _ = self.coordinator.performCommand(.niriToggleSnap) }
-        ))
-
-        items.append(TileSpotlightItem(
+        )
+        appendCommand(
+            id: "cmd-close-session",
+            icon: "xmark",
+            title: "Close Session",
+            subtitle: "Close the current session",
+            searchText: "close session",
+            shortcutAction: .closeSession,
+            run: { _ = self.coordinator.performCommand(.closeSession) }
+        )
+        appendCommand(
+            id: "cmd-relaunch-session",
+            icon: "arrow.clockwise",
+            title: "Relaunch Session",
+            subtitle: "Restart the current terminal session",
+            searchText: "relaunch session restart terminal",
+            shortcutAction: .relaunchSession,
+            run: { _ = self.coordinator.performCommand(.relaunchSession) }
+        )
+        appendCommand(
+            id: "cmd-add-terminal-right",
+            icon: "rectangle.split.2x1",
+            title: "Niri: Add Terminal Right",
+            subtitle: "Create a terminal tile to the right",
+            searchText: "split pane right vertical niri terminal",
+            shortcutAction: .splitRight,
+            run: { _ = self.coordinator.performCommand(.splitRight) }
+        )
+        appendCommand(
+            id: "cmd-add-task-below",
+            icon: "rectangle.split.1x2",
+            title: "Niri: Add Task Below",
+            subtitle: "Create a terminal tile below in this task stack",
+            searchText: "split pane down horizontal niri task below",
+            shortcutAction: .splitDown,
+            run: { _ = self.coordinator.performCommand(.splitDown) }
+        )
+        appendCommand(
+            id: "cmd-open-add-tile-menu",
+            icon: "plus.circle",
+            title: "Add Tile",
+            subtitle: "Open the tile spotlight to add a new tile",
+            searchText: "add tile spotlight new terminal browser app plus",
+            shortcutAction: .niriOpenAddTileMenu,
+            run: { _ = self.coordinator.performCommand(.niriOpenAddTileMenu) }
+        )
+        appendCommand(
+            id: "cmd-overview",
+            icon: "square.grid.3x3",
+            title: "Niri: Toggle Overview",
+            subtitle: "Open or close Niri overview mode",
+            searchText: "niri overview toggle canvas workspaces bird eye",
+            shortcutAction: .niriToggleOverview,
+            run: { _ = self.coordinator.performCommand(.niriToggleOverview) }
+        )
+        appendCommand(
             id: "cmd-tabbed",
             icon: "rectangle.tophalf.inset.filled",
-            title: "Toggle Column Tabbed Display",
-            subtitle: "Switch column between normal and tabbed",
-            searchText: "tabbed column display mode toggle",
-            shortcut: shortcutLabel(.niriToggleColumnTabbedDisplay),
-            section: .commands,
+            title: "Niri: Toggle Column Tabbed Display",
+            subtitle: "Switch focused column between normal and tabbed",
+            searchText: "niri toggle tabbed column display mode",
+            shortcutAction: .niriToggleColumnTabbedDisplay,
             run: { _ = self.coordinator.performCommand(.niriToggleColumnTabbedDisplay) }
-        ))
+        )
+        appendCommand(
+            id: "cmd-focused-zoom",
+            icon: "arrow.up.left.and.arrow.down.right",
+            title: "Niri: Toggle Focused Tile Zoom",
+            subtitle: "Make the focused tile fill the canvas viewport",
+            searchText: "niri focused tile zoom fullscreen max",
+            shortcutAction: .niriToggleFocusedTileZoom,
+            run: { _ = self.coordinator.performCommand(.niriToggleFocusedTileZoom) }
+        )
+        appendCommand(
+            id: "cmd-snap",
+            icon: "dot.scope",
+            title: "Niri: Toggle Snap",
+            subtitle: sessionService.settings.niri.snapEnabled ? "Disable snap and keep free-pan release" : "Enable velocity-based snap",
+            searchText: "niri snap soft snap free pan velocity",
+            shortcutAction: .niriToggleSnap,
+            run: { _ = self.coordinator.performCommand(.niriToggleSnap) }
+        )
+        appendCommand(
+            id: "cmd-focus-workspace-down",
+            icon: "arrow.down.to.line",
+            title: "Niri: Focus Workspace Down",
+            subtitle: "Move focus to the next workspace",
+            searchText: "niri workspace down focus next",
+            shortcutAction: .niriFocusWorkspaceDown,
+            run: { _ = self.coordinator.performCommand(.niriFocusWorkspaceDown) }
+        )
+        appendCommand(
+            id: "cmd-focus-workspace-up",
+            icon: "arrow.up.to.line",
+            title: "Niri: Focus Workspace Up",
+            subtitle: "Move focus to the previous workspace",
+            searchText: "niri workspace up focus previous",
+            shortcutAction: .niriFocusWorkspaceUp,
+            run: { _ = self.coordinator.performCommand(.niriFocusWorkspaceUp) }
+        )
+        appendCommand(
+            id: "cmd-move-column-down",
+            icon: "arrow.down.square",
+            title: "Niri: Move Column To Workspace Down",
+            subtitle: "Move focused column to the next workspace",
+            searchText: "niri move column workspace down",
+            shortcutAction: .niriMoveColumnToWorkspaceDown,
+            run: { _ = self.coordinator.performCommand(.niriMoveColumnToWorkspaceDown) }
+        )
+        appendCommand(
+            id: "cmd-move-column-up",
+            icon: "arrow.up.square",
+            title: "Niri: Move Column To Workspace Up",
+            subtitle: "Move focused column to the previous workspace",
+            searchText: "niri move column workspace up",
+            shortcutAction: .niriMoveColumnToWorkspaceUp,
+            run: { _ = self.coordinator.performCommand(.niriMoveColumnToWorkspaceUp) }
+        )
+        appendCommand(
+            id: "cmd-close-tile",
+            icon: "xmark.rectangle",
+            title: "Close Tile",
+            subtitle: "Close the focused tile",
+            searchText: "close tile pane remove",
+            shortcutAction: .closePane,
+            run: { _ = self.coordinator.performCommand(.closePane) }
+        )
+        appendCommand(
+            id: "cmd-toggle-sidebar",
+            icon: "sidebar.left",
+            title: "Toggle Sidebar",
+            subtitle: "Show or hide the sidebar",
+            searchText: "toggle sidebar show hide",
+            shortcutAction: .toggleSidebar,
+            run: { _ = self.coordinator.performCommand(.toggleSidebar) }
+        )
+        appendCommand(
+            id: "cmd-settings",
+            icon: "gear",
+            title: "Open Settings",
+            subtitle: "Open IDX0 preferences",
+            searchText: "settings preferences open",
+            shortcutAction: .openSettings,
+            run: { _ = self.coordinator.performCommand(.openSettings) }
+        )
+        appendCommand(
+            id: "cmd-shortcuts",
+            icon: "keyboard",
+            title: "Keyboard Shortcuts",
+            subtitle: "View all keyboard shortcuts",
+            searchText: "keyboard shortcuts help keys bindings",
+            shortcutAction: .keyboardShortcuts,
+            run: { _ = self.coordinator.performCommand(.keyboardShortcuts) }
+        )
+
+        appendCommand(
+            id: "cmd-vscode-setup-browser-debug",
+            icon: "ladybug",
+            title: "VS Code: Setup Browser Debug (idx-web)",
+            subtitle: "Create/update launch.json attach config and launch Chromium debug browser",
+            searchText: "vscode browser debug attach chrome launch json idx-web",
+            run: {
+                if let id = selectedID {
+                    _ = self.sessionService.setupVSCodeBrowserDebug(for: id)
+                }
+            }
+        )
+
+        for session in sessionService.sessions where session.id != selectedID {
+            items.append(TileSpotlightItem(
+                id: "cmd-switch-\(session.id.uuidString)",
+                icon: session.isWorktreeBacked ? "arrow.triangle.branch" : "terminal",
+                title: "Switch to: \(session.title)",
+                subtitle: session.subtitle,
+                searchText: "switch \(session.title.lowercased()) \(session.subtitle.lowercased())",
+                section: .commands,
+                run: { [id = session.id] in self.sessionService.focusSession(id) }
+            ))
+        }
+
+        if showsVibe {
+            appendCommand(
+                id: "cmd-create-checkpoint",
+                icon: "bookmark",
+                title: "Create Checkpoint",
+                subtitle: "Save current state of selected session",
+                searchText: "create checkpoint save state",
+                shortcutAction: .showCheckpoints,
+                run: {
+                    guard let id = selectedID else { return }
+                    Task {
+                        _ = try? await self.workflowService.createManualCheckpoint(
+                            sessionID: id,
+                            title: "Manual Checkpoint",
+                            summary: "Created from spotlight",
+                            requestReview: false
+                        )
+                    }
+                }
+            )
+            appendCommand(
+                id: "cmd-toggle-rail",
+                icon: "tray.full",
+                title: "Toggle Workflow Rail",
+                subtitle: "Show or hide the supervision panel",
+                searchText: "toggle workflow rail inbox supervision panel",
+                shortcutAction: .toggleWorkflowRail,
+                run: { _ = self.coordinator.performCommand(.toggleWorkflowRail) }
+            )
+            appendCommand(
+                id: "cmd-focus-queue",
+                icon: "exclamationmark.circle",
+                title: "Focus Next Queue Item",
+                subtitle: "Jump to the highest-priority unresolved item",
+                searchText: "focus queue next item priority",
+                shortcutAction: .focusNextQueueItem,
+                run: { _ = self.coordinator.performCommand(.focusNextQueueItem) }
+            )
+            appendCommand(
+                id: "cmd-reveal-worktree",
+                icon: "folder.badge.questionmark",
+                title: "Reveal Worktree in Finder",
+                subtitle: "Open worktree directory in Finder",
+                searchText: "reveal worktree finder",
+                run: {
+                    if hasWorktree, let id = selectedID {
+                        self.sessionService.revealWorktree(for: id)
+                    }
+                }
+            )
+        }
 
         return items
     }

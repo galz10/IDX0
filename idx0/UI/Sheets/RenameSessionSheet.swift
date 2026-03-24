@@ -71,6 +71,7 @@ struct RenameSessionSheet: View {
                 .buttonStyle(.plain)
                 .idxHitTarget()
                 .disabled(coordinator.renameDraftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -86,6 +87,17 @@ struct RenameSessionSheet: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 fieldFocused = true
             }
+        }
+        .onKeyPress(.escape) {
+            coordinator.cancelRenameSession()
+            return .handled
+        }
+        .onKeyPress(.return) {
+            guard !coordinator.renameDraftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .ignored
+            }
+            coordinator.commitRenameSession()
+            return .handled
         }
     }
 

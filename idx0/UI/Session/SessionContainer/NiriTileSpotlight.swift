@@ -23,7 +23,7 @@ struct TileSpotlightItem: Identifiable {
         var header: String {
             switch self {
             case .apps: return "ADD TILE"
-            case .tools: return "AGENTIC CLIS"
+            case .tools: return "AGENTIC CLIs"
             case .commands: return "COMMANDS"
             }
         }

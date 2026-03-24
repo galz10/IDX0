@@ -14,6 +14,7 @@ extension SessionContainerView {
             if niriQuickAddMenuPresented {
                 Color.clear
                     .contentShape(Rectangle())
+                    .ignoresSafeArea()
                     .onTapGesture {
                         withAnimation(.spring(duration: 0.2, bounce: 0.1)) {
                             niriQuickAddMenuPresented = false
@@ -57,12 +58,22 @@ extension SessionContainerView {
         }
         .onReceive(coordinator.$niriQuickAddRequestSessionID) { requestedSessionID in
             guard requestedSessionID == session.id else { return }
-            niriQuickAddMenuPresented = true
+            withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+                niriQuickAddMenuPresented = true
+            }
+            coordinator.niriQuickAddRequestSessionID = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .niriSpotlightDismissRequested)) { _ in
+            guard niriQuickAddMenuPresented else { return }
+            withAnimation(.spring(duration: 0.2, bounce: 0.1)) {
+                niriQuickAddMenuPresented = false
+            }
         }
         .onDisappear {
             niriCancelEdgeAutoScroll(sessionID: session.id)
             niriCancelHoverActivation(sessionID: session.id)
             niriClearResizeVisualizer(sessionID: session.id)
+            niriQuickAddMenuPresented = false
         }
         .onChange(of: layout.camera.activeColumnID) { _, _ in
             niriAnimateCameraToFocusedColumn(sessionID: session.id)
