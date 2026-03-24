@@ -10,18 +10,20 @@ struct TileSpotlightItem: Identifiable {
     let subtitle: String
     let searchText: String
     var shortcut: String? = nil
-    var section: SpotlightSection = .tiles
+    var section: SpotlightSection = .apps
     let run: () -> Void
 
     enum SpotlightSection: Int, Comparable {
-        case tiles = 0
-        case commands = 1
+        case apps = 0
+        case tools = 1
+        case commands = 2
 
         static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 
         var header: String {
             switch self {
-            case .tiles: return "ADD TILE"
+            case .apps: return "ADD TILE"
+            case .tools: return "AGENTIC CLIS"
             case .commands: return "COMMANDS"
             }
         }
@@ -39,7 +41,9 @@ struct NiriTileSpotlight: View {
     @FocusState private var queryFocused: Bool
     @State private var query = ""
     @State private var selectedIndex = 0
-    @State private var hoveredIndex: Int?
+    /// Blocks mouse interaction briefly after appearing so the scroll view
+    /// doesn't steal events when the cursor happens to sit over it.
+    @State private var interactionReady = false
 
     private var filtered: [TileSpotlightItem] {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -58,9 +62,8 @@ struct NiriTileSpotlight: View {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
         // When searching, don't group — show flat ranked results
         guard normalized.isEmpty else {
-            return [(.tiles, filtered)]
+            return [(.apps, filtered)]
         }
-        // Group by section
         var dict: [TileSpotlightItem.SpotlightSection: [TileSpotlightItem]] = [:]
         for item in filtered {
             dict[item.section, default: []].append(item)
@@ -123,9 +126,8 @@ struct NiriTileSpotlight: View {
                                                 executeSelected()
                                             }
                                             .onHover { hovering in
-                                                if hovering {
-                                                    selectedIndex = globalIndex
-                                                }
+                                                guard interactionReady, hovering else { return }
+                                                selectedIndex = globalIndex
                                             }
                                     }
                                 }
@@ -139,9 +141,8 @@ struct NiriTileSpotlight: View {
                                             executeSelected()
                                         }
                                         .onHover { hovering in
-                                            if hovering {
-                                                selectedIndex = index
-                                            }
+                                            guard interactionReady, hovering else { return }
+                                            selectedIndex = index
                                         }
                                 }
                             }
@@ -150,6 +151,7 @@ struct NiriTileSpotlight: View {
                     }
                     .frame(maxHeight: 340)
                     .scrollIndicators(.hidden)
+                    .scrollDisabled(!interactionReady)
                     .onChange(of: selectedIndex) { _, newValue in
                         if let item = filtered.dropFirst(newValue).first {
                             withAnimation(.easeOut(duration: 0.08)) {
@@ -180,8 +182,13 @@ struct NiriTileSpotlight: View {
         .onAppear {
             query = ""
             selectedIndex = 0
+            interactionReady = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 queryFocused = true
+            }
+            // Delay mouse interaction so scroll/hover don't fire immediately
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                interactionReady = true
             }
         }
         .onKeyPress(.escape) { dismiss(); return .handled }

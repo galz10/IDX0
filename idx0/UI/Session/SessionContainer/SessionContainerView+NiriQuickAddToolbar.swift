@@ -105,7 +105,7 @@ extension SessionContainerView {
             subtitle: "New terminal tile",
             searchText: "terminal shell console bash zsh new tile add",
             shortcut: shortcutLabel(.niriAddTerminalRight),
-            section: .tiles,
+            section: .apps,
             run: {
                 _ = self.sessionService.niriAddTerminalRight(in: sessionID)
             }
@@ -121,7 +121,7 @@ extension SessionContainerView {
                 title: app.displayName,
                 subtitle: app.menuSubtitle,
                 searchText: "\(app.displayName.lowercased()) \(app.id) \(app.menuSubtitle.lowercased()) app tile add",
-                section: .tiles,
+                section: .apps,
                 run: {
                     _ = self.sessionService.niriAddAppRight(in: sessionID, appID: app.id)
                 }
@@ -135,7 +135,7 @@ extension SessionContainerView {
             title: "Browser",
             subtitle: "Open web view tile",
             searchText: "browser web view globe url http tile add",
-            section: .tiles,
+            section: .apps,
             run: {
                 _ = self.sessionService.niriAddBrowserRight(in: sessionID)
             }
@@ -150,7 +150,7 @@ extension SessionContainerView {
                 title: tool.displayName,
                 subtitle: tool.executableName,
                 searchText: "\(tool.displayName.lowercased()) \(tool.executableName.lowercased()) cli agent agentic tool tile add",
-                section: .tiles,
+                section: .tools,
                 run: {
                     self.niriLaunchToolInNewTile(sessionID: sessionID, toolID: tool.id)
                 }
