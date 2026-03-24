@@ -822,9 +822,7 @@ extension SessionService {
                 writeBlock()
             }
         } else {
-            persistenceQueue.async {
-                writeBlock()
-            }
+            persistenceQueue.async(execute: DispatchWorkItem(block: writeBlock))
         }
     }
 

@@ -679,6 +679,7 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         terminateProcess()
 
         guard !userStopped else { return }
+        if case .failed = state { return }
         if startTask == nil {
             state = .failed(
                 message: "OpenCode process exited unexpectedly.",
@@ -751,9 +752,11 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
             return
         }
 
+        appendRuntimeLog("web content termination retry budget exhausted; terminating runtime process")
         state = .failed(
             message: "Embedded browser process crashed repeatedly. Open logs for details.",
             logPath: paths.runtimeLogPath.path
         )
+        terminateProcess()
     }
 }

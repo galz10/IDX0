@@ -63,13 +63,28 @@ extension SessionContainerView {
         }
         .onChange(of: layout.camera.focusedItemID) { _, _ in
             niriAnimateCameraToFocusedColumn(sessionID: session.id)
-            if sessionService.selectedSessionID == session.id {
-                _ = sessionService.launchFocusedNiriTerminalIfVisible(sessionID: session.id)
+            guard sessionService.selectedSessionID == session.id else { return }
+            guard !layout.isOverviewOpen else { return }
+
+            if let focusedItemID = layout.camera.focusedItemID,
+               let path = sessionService.findNiriItemPath(layout: layout, itemID: focusedItemID),
+               case .terminal(let focusedTabID) =
+                   layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex].ref,
+               sessionService.selectedTabID(for: session.id) == focusedTabID {
+                return
             }
+
+            _ = sessionService.launchFocusedNiriTerminalIfVisible(sessionID: session.id)
         }
         .onChange(of: layout.isOverviewOpen) { _, isOverviewOpen in
             if !isOverviewOpen {
                 niriClearResizeVisualizer(sessionID: session.id)
+                if sessionService.selectedSessionID == session.id {
+                    _ = sessionService.launchFocusedNiriTerminalIfVisible(
+                        sessionID: session.id,
+                        reason: .selectedSessionVisible
+                    )
+                }
             }
         }
         .onChange(of: layout.camera.activeWorkspaceID) { _, newID in

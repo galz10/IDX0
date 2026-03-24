@@ -417,6 +417,33 @@ extension SessionServiceTests {
         XCTAssertTrue(service.runtimeControllers.isEmpty)
     }
 
+    func testFocusedNiriTerminalDoesNotLaunchWhenOverviewIsOpen() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+        service.saveSettings { $0.niriCanvasEnabled = true }
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Overview Launch Guard")).session
+        service.ensureNiriLayoutState(for: session.id)
+
+        for (controllerID, controller) in service.runtimeControllers {
+            controller.terminate()
+            service.clearLaunchTracking(for: controllerID)
+        }
+        service.runtimeControllers.removeAll()
+        service.ownerSessionIDByControllerID.removeAll()
+        service.visibleTerminalControllerIDsBySession.removeAll()
+
+        service.toggleNiriOverview(sessionID: session.id)
+        XCTAssertTrue(service.niriLayout(for: session.id).isOverviewOpen)
+
+        let launched = service.launchFocusedNiriTerminalIfVisible(sessionID: session.id)
+
+        XCTAssertTrue(launched.isEmpty)
+        XCTAssertTrue(service.runtimeControllers.isEmpty)
+        XCTAssertFalse(service.shouldLaunchVisibleTerminals(for: session.id))
+        XCTAssertNil(service.visibleTerminalControllerIDsBySession[session.id])
+    }
+
     func testHiddenRunningSessionReusesSameControllerOnReturn() async throws {
         let fixture = try Fixture()
         let service = fixture.service

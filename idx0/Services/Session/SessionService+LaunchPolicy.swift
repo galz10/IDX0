@@ -146,8 +146,17 @@ extension SessionService {
         reason: TerminalLaunchPolicyReason = .niriFocusedTerminalItem
     ) -> Set<UUID> {
         ensureNiriLayout(for: sessionID)
-        guard let layout = niriLayoutsBySession[sessionID],
-              let focusedItemID = layout.camera.focusedItemID,
+        guard let layout = niriLayoutsBySession[sessionID] else {
+            controllerBecameHidden(sessionID: sessionID)
+            return []
+        }
+
+        guard !layout.isOverviewOpen else {
+            controllerBecameHidden(sessionID: sessionID)
+            return []
+        }
+
+        guard let focusedItemID = layout.camera.focusedItemID,
               let path = findNiriItemPath(layout: layout, itemID: focusedItemID)
         else {
             controllerBecameHidden(sessionID: sessionID)
@@ -203,6 +212,8 @@ extension SessionService {
         else {
             return false
         }
+
+        guard !layout.isOverviewOpen else { return false }
 
         if case .terminal = layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex].ref {
             return true

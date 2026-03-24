@@ -1130,10 +1130,12 @@ final class VSCodeTileController: ObservableObject, NiriAppTileRuntimeControllin
             return
         }
 
+        appendRuntimeLog("web content termination retry budget exhausted; terminating runtime process")
         state = .failed(
             message: "Embedded browser process crashed repeatedly. Open logs for details.",
             logPath: paths.runtimeLogPath.path
         )
+        terminateProcess()
     }
 
     private func loadPersistedZoom() -> CGFloat {
