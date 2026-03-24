@@ -259,7 +259,7 @@ extension SessionService {
             selectedSessionID: selectedSessionID,
             sessions: &sessions,
             relaunchSession: { [weak self] sessionID in
-                self?.relaunchSession(sessionID)
+                self?.relaunchSession(sessionID, launchReason: .relaunchSelectedSession)
             },
             relaunchAllSessions: { [weak self] in
                 self?.relaunchAllSessions()

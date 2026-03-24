@@ -118,9 +118,11 @@ extension SessionContainerView {
                 )
                 .id(session.id)
                 .onAppear {
-                    controller.requestLaunchIfNeeded()
                     controller.focus()
                     sessionService.markTerminalFocused(for: session.id)
+                }
+                .onDisappear {
+                    sessionService.controllerBecameHidden(sessionID: session.id)
                 }
                 .onTapGesture {
                     sessionService.markTerminalFocused(for: session.id)
@@ -286,7 +288,10 @@ extension SessionContainerView {
 
             if case .failedToLaunch = controller.runtimeState {
                 Button("Retry") {
-                    controller.requestLaunchIfNeeded()
+                    _ = sessionService.requestLaunchForActiveTerminals(
+                        in: sessionID,
+                        reason: .explicitAction
+                    )
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.mini)

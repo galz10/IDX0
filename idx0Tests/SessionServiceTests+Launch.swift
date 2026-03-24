@@ -343,6 +343,94 @@ extension SessionServiceTests {
         XCTAssertTrue(updated?.statusText?.contains("Restrictions unavailable") ?? false)
     }
 
+    func testCreateInactiveTabDoesNotLaunchController() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Inactive Tab")).session
+
+        for (controllerID, controller) in service.runtimeControllers {
+            controller.terminate()
+            service.clearLaunchTracking(for: controllerID)
+        }
+        service.runtimeControllers.removeAll()
+        service.ownerSessionIDByControllerID.removeAll()
+
+        _ = service.createTab(in: session.id, activate: false)
+
+        XCTAssertTrue(service.runtimeControllers.isEmpty)
+    }
+
+    func testFocusedNiriBrowserDoesNotLaunchTerminalController() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+        service.saveSettings { $0.niriCanvasEnabled = true }
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Browser")).session
+        for (controllerID, controller) in service.runtimeControllers {
+            controller.terminate()
+            service.clearLaunchTracking(for: controllerID)
+        }
+        service.runtimeControllers.removeAll()
+        service.ownerSessionIDByControllerID.removeAll()
+
+        service.ensureNiriLayoutState(for: session.id)
+        _ = service.niriAddBrowserRight(in: session.id)
+
+        XCTAssertTrue(service.runtimeControllers.isEmpty)
+    }
+
+    func testHiddenRunningSessionReusesSameControllerOnReturn() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let first = try await service.createSession(from: SessionCreationRequest(title: "First")).session
+        let second = try await service.createSession(from: SessionCreationRequest(title: "Second")).session
+
+        service.focusSession(first.id)
+        guard let firstController = service.ensureController(for: first.id) else {
+            XCTFail("Expected first controller")
+            return
+        }
+        _ = service.requestLaunchForActiveTerminals(in: first.id, reason: .explicitAction)
+
+        service.focusSession(second.id)
+        XCTAssertTrue(service.runtimeControllers[firstController.sessionID] === firstController)
+
+        service.focusSession(first.id)
+        let returnedController = service.ensureController(for: first.id)
+        XCTAssertTrue(returnedController === firstController)
+    }
+
+    func testRelaunchAllSessionsStagesSelectedSessionFirst() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let first = try await service.createSession(from: SessionCreationRequest(title: "One")).session
+        let second = try await service.createSession(from: SessionCreationRequest(title: "Two")).session
+        let third = try await service.createSession(from: SessionCreationRequest(title: "Three")).session
+
+        service.focusSession(second.id)
+        for (controllerID, controller) in service.runtimeControllers {
+            controller.terminate()
+            service.clearLaunchTracking(for: controllerID)
+        }
+        service.runtimeControllers.removeAll()
+        service.ownerSessionIDByControllerID.removeAll()
+        service.visibleTerminalControllerIDsBySession.removeAll()
+
+        service.relaunchAllSessions()
+
+        try await Task.sleep(nanoseconds: 60_000_000)
+        XCTAssertNotNil(service.runtimeControllers[second.id])
+        XCTAssertEqual(service.runtimeControllers.count, 1)
+
+        try await Task.sleep(nanoseconds: 550_000_000)
+        XCTAssertNotNil(service.runtimeControllers[first.id])
+        XCTAssertNotNil(service.runtimeControllers[third.id])
+        XCTAssertEqual(service.runtimeControllers.count, 3)
+    }
+
     func testSwipeTrackerProjectsForwardWithPositiveVelocity() {
         var tracker = SwipeTracker(historyLimit: 0.150, deceleration: 0.997)
         tracker.push(delta: 12, at: 0.00)

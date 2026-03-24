@@ -8,6 +8,7 @@ final class TerminalMonitorService: ObservableObject {
         var lastScanResult: AgentScanResult = .idle
         var lastPollTime: Date = .distantPast
         var hasActivity: Bool = false
+        var fastPollingUntil: Date = .distantPast
     }
 
     @Published private(set) var agentStates: [UUID: AgentScanResult] = [:]
@@ -15,7 +16,11 @@ final class TerminalMonitorService: ObservableObject {
     private var states: [UUID: SessionMonitorState] = [:]
     private let scanner = AgentOutputScanner()
     private var pollTimer: Timer?
-    private let tailLineCount = 200
+    private let tailLineCount = 120
+    let focusedPollIntervalSeconds: TimeInterval = 2
+    let backgroundPollIntervalSeconds: TimeInterval = 8
+    private let timerTickSeconds: TimeInterval = 1
+    private let fastPollingWindowSeconds: TimeInterval = 12
 
     private weak var host: GhosttyAppHost?
     private var sessionSurfaceProvider: ((UUID) -> GhosttyTerminalSurface?)?
@@ -41,7 +46,7 @@ final class TerminalMonitorService: ObservableObject {
 
     func startMonitoring() {
         guard pollTimer == nil else { return }
-        let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: timerTickSeconds, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.pollAllSessions()
             }
@@ -67,29 +72,73 @@ final class TerminalMonitorService: ObservableObject {
     }
 
     func notifyActivity(for sessionID: UUID) {
-        states[sessionID]?.hasActivity = true
+        guard var state = states[sessionID] else { return }
+        state.hasActivity = true
+        state.fastPollingUntil = Date().addingTimeInterval(fastPollingWindowSeconds)
+        states[sessionID] = state
     }
 
     // MARK: - Polling
 
     private func pollAllSessions() {
+        let now = Date()
         let sessionIDs = Array(states.keys)
         for sessionID in sessionIDs {
-            pollSession(sessionID)
+            guard let state = states[sessionID] else { continue }
+            let sessionInfo = sessionInfoProvider?(sessionID)
+            let isFocused = sessionInfo?.isFocused ?? false
+            let surface = sessionSurfaceProvider?(sessionID)
+            let interval = pollingInterval(
+                for: state,
+                now: now,
+                isFocused: isFocused,
+                hasRunningSurface: surface != nil
+            )
+            guard now.timeIntervalSince(state.lastPollTime) >= interval else { continue }
+            pollSession(sessionID, now: now, surface: surface)
         }
     }
 
-    private func pollSession(_ sessionID: UUID) {
+    func pollingInterval(
+        for state: SessionMonitorState,
+        now: Date,
+        isFocused: Bool,
+        hasRunningSurface: Bool
+    ) -> TimeInterval {
+        guard hasRunningSurface else { return backgroundPollIntervalSeconds }
+        if isFocused { return focusedPollIntervalSeconds }
+        if state.hasActivity { return focusedPollIntervalSeconds }
+        if now < state.fastPollingUntil { return focusedPollIntervalSeconds }
+        return backgroundPollIntervalSeconds
+    }
+
+    private func pollSession(_ sessionID: UUID, now: Date, surface: GhosttyTerminalSurface?) {
         guard var state = states[sessionID] else { return }
-        guard let surface = sessionSurfaceProvider?(sessionID) else { return }
+
+        guard let surface else {
+            state.lastPollTime = now
+            states[sessionID] = state
+            return
+        }
+
         guard let host else { return }
 
-        guard let fullText = host.dumpScrollback(surface) else { return }
+        guard let fullText = host.dumpScrollback(surface) else {
+            state.lastPollTime = now
+            states[sessionID] = state
+            return
+        }
 
         // Extract tail for diffing
         let allLines = fullText.components(separatedBy: .newlines)
         let tailLines = Array(allLines.suffix(tailLineCount))
         let currentTail = tailLines.joined(separator: "\n")
+
+        if currentTail == state.lastSnapshotTail, !state.hasActivity {
+            state.lastPollTime = now
+            states[sessionID] = state
+            return
+        }
 
         // Compute new output since last poll
         let newOutput: String
@@ -101,7 +150,7 @@ final class TerminalMonitorService: ObservableObject {
 
         // Skip if no new output
         guard !newOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || state.hasActivity else {
-            state.lastPollTime = Date()
+            state.lastPollTime = now
             states[sessionID] = state
             return
         }
@@ -113,15 +162,17 @@ final class TerminalMonitorService: ObservableObject {
             previousResult: previousResult
         )
 
-        state.lastSnapshotTail = currentTail
-        state.lastScanResult = result
-        state.lastPollTime = Date()
-        state.hasActivity = false
-        states[sessionID] = state
-
-        // Detect transitions
         let stateChanged = result.state != previousResult.state
             || result.isApprovalPrompt != previousResult.isApprovalPrompt
+        if stateChanged {
+            state.fastPollingUntil = now.addingTimeInterval(fastPollingWindowSeconds)
+        }
+
+        state.lastSnapshotTail = currentTail
+        state.lastScanResult = result
+        state.lastPollTime = now
+        state.hasActivity = false
+        states[sessionID] = state
 
         if stateChanged {
             agentStates[sessionID] = result
@@ -147,7 +198,7 @@ final class TerminalMonitorService: ObservableObject {
         // Find where previous tail ends in current
         // Use last few lines of previous as anchor
         let prevLines = previous.components(separatedBy: .newlines)
-        let anchorCount = min(3, prevLines.count)
+        let anchorCount = min(2, prevLines.count)
         let anchor = prevLines.suffix(anchorCount).joined(separator: "\n")
 
         if let range = current.range(of: anchor, options: .backwards) {

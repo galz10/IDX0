@@ -71,6 +71,7 @@ extension SessionService {
         attentionCenter.removeItems(for: id)
         attentionItems = attentionCenter.items
         lastFocusedSurfaceBySession.removeValue(forKey: id)
+        controllerBecameHidden(sessionID: id)
         wrapperFallbackAppliedBySessionID.remove(id)
         if pendingWorktreeDeletePrompt?.sessionID == id {
             pendingWorktreeDeletePrompt = nil
@@ -80,6 +81,17 @@ extension SessionService {
             selectedSessionID = previousSelection ?? nextSelection
             if let replacementID = selectedSessionID {
                 _ = ensureController(for: replacementID)
+                if settings.niriCanvasEnabled {
+                    _ = launchFocusedNiriTerminalIfVisible(
+                        sessionID: replacementID,
+                        reason: .selectedSessionVisible
+                    )
+                } else {
+                    _ = requestLaunchForActiveTerminals(
+                        in: replacementID,
+                        reason: .selectedSessionVisible
+                    )
+                }
             }
         }
 
@@ -91,6 +103,10 @@ extension SessionService {
     }
 
     func relaunchSession(_ id: UUID) {
+        relaunchSession(id, launchReason: .explicitAction)
+    }
+
+    func relaunchSession(_ id: UUID, launchReason: TerminalLaunchPolicyReason) {
         guard sessions.contains(where: { $0.id == id }) else { return }
         if let tabs = tabsBySession[id] {
             for controllerID in Set(tabs.flatMap(\.allControllerIDs)) {
@@ -105,17 +121,34 @@ extension SessionService {
             ownerSessionIDByControllerID.removeValue(forKey: id)
             clearLaunchTracking(for: id)
         }
+        controllerBecameHidden(sessionID: id)
         setStatusText(for: id, text: nil)
-        ensureController(for: id)?.requestLaunchIfNeeded()
+        _ = requestLaunchForActiveTerminals(in: id, reason: launchReason)
         if selectedSessionID == id {
             ensureController(for: id)?.focus()
         }
     }
 
     func relaunchAllSessions() {
-        for session in sessions {
-            relaunchSession(session.id)
+        let indexedSessions = Array(sessions.enumerated())
+        let selected = selectedSessionID.flatMap { selectedID in
+            sessions.contains(where: { $0.id == selectedID }) ? selectedID : nil
         }
+
+        let backgroundSessions = indexedSessions
+            .filter { $0.element.id != selected }
+            .sorted { lhs, rhs in
+                if lhs.element.lastActiveAt != rhs.element.lastActiveAt {
+                    return lhs.element.lastActiveAt > rhs.element.lastActiveAt
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map { $0.element.id }
+
+        restoreLaunchQueue.schedule(
+            selectedSessionID: selected,
+            backgroundSessionIDs: backgroundSessions
+        )
     }
 
     func focusNextAttentionItem() {
@@ -376,14 +409,19 @@ extension SessionService {
 
     func markTerminalFocused(for sessionID: UUID) {
         setLastFocusedSurface(for: sessionID, surface: .terminal)
+        if shouldLaunchVisibleTerminals(for: sessionID) {
+            _ = requestLaunchForActiveTerminals(in: sessionID, reason: .terminalSurfaceVisible)
+        }
     }
 
     func markBrowserFocused(for sessionID: UUID) {
         setLastFocusedSurface(for: sessionID, surface: .browser)
+        controllerBecameHidden(sessionID: sessionID)
     }
 
     func markNiriAppFocused(for sessionID: UUID, appID: String) {
         setLastFocusedSurface(for: sessionID, surface: .app(appID: appID))
+        controllerBecameHidden(sessionID: sessionID)
     }
 
     @discardableResult
@@ -656,6 +694,7 @@ extension SessionService {
     }
 
     func prepareForTermination() {
+        restoreLaunchQueue.cancel()
         saveAllScrollback()
         persistNow()
         let controllers = Array(runtimeControllers.values)
@@ -666,6 +705,7 @@ extension SessionService {
         launchUsedWrapperByControllerID.removeAll()
         launchInitializedControllerIDs.removeAll()
         wrapperFallbackAppliedBySessionID.removeAll()
+        visibleTerminalControllerIDsBySession.removeAll()
         browserControllers.removeAll()
         niriBrowserControllersByItemID.removeAll()
         for (itemID, controllers) in Array(niriAppControllersByItemID) {

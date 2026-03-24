@@ -136,8 +136,6 @@ struct GhosttyTerminalView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: PortalPlaceholderView, context: Context) {
-        controller.requestLaunchIfNeeded()
-
         guard let runtimeView = controller.runtimeView else { return }
 
         let coordinator = context.coordinator

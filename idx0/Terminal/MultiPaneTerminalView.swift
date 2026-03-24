@@ -102,7 +102,6 @@ final class MultiPaneContainerView: NSView {
         // Add views for new controllers
         for controllerID in newIDs.subtracting(oldIDs) {
             guard let controller = controllerProvider(controllerID) else { continue }
-            controller.requestLaunchIfNeeded()
 
             guard let runtimeView = controller.runtimeView else {
                 // Surface not ready yet — schedule a retry
@@ -117,7 +116,6 @@ final class MultiPaneContainerView: NSView {
         // (same ID, new runtimeView), so ID-set diff alone is not enough.
         for controllerID in newIDs.intersection(oldIDs) {
             guard let controller = controllerProvider(controllerID) else { continue }
-            controller.requestLaunchIfNeeded()
 
             guard let runtimeView = controller.runtimeView else {
                 scheduleRetry(controllerID: controllerID, controllerProvider: controllerProvider)

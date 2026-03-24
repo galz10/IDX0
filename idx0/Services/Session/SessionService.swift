@@ -42,6 +42,7 @@ final class SessionService: ObservableObject {
     var wrapperStartupProbeTaskByControllerID: [UUID: Task<Void, Never>] = [:]
     var launchInitializedControllerIDs: Set<UUID> = []
     var wrapperFallbackAppliedBySessionID: Set<UUID> = []
+    var visibleTerminalControllerIDsBySession: [UUID: Set<UUID>] = [:]
     let wrapperStartupProbeDelayNanoseconds: UInt64 = 3_000_000_000
     let wrapperRetryWindowSeconds: TimeInterval = 12.0
     var browserControllers: [UUID: SessionBrowserController] = [:]
@@ -61,7 +62,9 @@ final class SessionService: ObservableObject {
     var notificationAuthorizationRequested = false
     var lastNotificationSentAt: [String: Date] = [:]
     let persistenceDebouncer = Debouncer(delay: 0.2)
+    let persistenceQueue = DispatchQueue(label: "idx0.persistence.serial", qos: .utility)
     let restoreCoordinator = SessionRestoreCoordinator()
+    let restoreLaunchQueue = RestoreLaunchQueue()
 
     @Published var tabsBySession: [UUID: [SessionTerminalTab]] = [:]
     @Published var selectedTabIDBySession: [UUID: UUID] = [:]
@@ -175,6 +178,9 @@ final class SessionService: ObservableObject {
         synchronizeAttentionState()
         installGhosttyCallbacks()
         reconcileActiveState()
+        restoreLaunchQueue.onLaunch = { [weak self] sessionID in
+            self?.relaunchSession(sessionID, launchReason: .relaunchBackgroundQueue)
+        }
         applyRestoreBehaviorOnLaunch()
         if let selectedSessionID {
             _ = ensureController(for: selectedSessionID)

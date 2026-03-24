@@ -214,6 +214,25 @@ final class SessionServiceTests: XCTestCase {
         XCTAssertFalse(hasMetadataOnly)
     }
 
+    func testPersistenceQueueKeepsLatestSessionSnapshotUnderBurstUpdates() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("idx0-persist-burst-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let service = try Self.makeService(root: root)
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Burst 0")).session
+
+        for index in 1...40 {
+            service.renameSession(session.id, title: "Burst \(index)")
+        }
+        service.persistNow()
+
+        let payload = try SessionStore(url: root.appendingPathComponent("sessions.json", isDirectory: false)).load()
+        let persisted = payload.sessions.first(where: { $0.id == session.id })
+        XCTAssertEqual(persisted?.title, "Burst 40")
+    }
+
     func testTileStateRestoresAcrossRelaunchWhenCleanupOnCloseDisabled() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("idx0-tile-restore-\(UUID().uuidString)", isDirectory: true)

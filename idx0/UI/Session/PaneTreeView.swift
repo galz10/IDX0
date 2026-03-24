@@ -22,9 +22,6 @@ struct PaneTreeView: View {
                             .padding(1)
                             .animation(.easeOut(duration: 0.15), value: isFocused)
                     }
-                    .onAppear {
-                        controller.requestLaunchIfNeeded()
-                    }
                     .onTapGesture {
                         onFocus(controllerID)
                     }

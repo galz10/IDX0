@@ -45,11 +45,20 @@ extension SessionService {
                 selectTab(sessionID: sessionID, tabID: tabID)
             }
             niriPrimeTabController(sessionID: sessionID, tabID: tabID)
+            if selectedSessionID == sessionID {
+                _ = requestLaunchForTabTerminals(
+                    sessionID: sessionID,
+                    tabID: tabID,
+                    reason: .niriFocusedTerminalItem
+                )
+            }
             setLastFocusedSurface(for: sessionID, surface: .terminal)
         case .browser:
+            controllerBecameHidden(sessionID: sessionID)
             _ = niriBrowserController(for: sessionID, itemID: itemID)
             setLastFocusedSurface(for: sessionID, surface: .browser)
         case .app(let appID):
+            controllerBecameHidden(sessionID: sessionID)
             ensureNiriAppController(for: sessionID, itemID: itemID, appID: appID)
             setLastFocusedSurface(for: sessionID, surface: .app(appID: appID))
         }
@@ -132,11 +141,10 @@ extension SessionService {
     func niriPrimeTabController(sessionID: UUID, tabID: UUID) {
         guard let tab = tabState(sessionID: sessionID, tabID: tabID) else { return }
         let controllerID = tab.activeControllerID
-        guard let controller = ensureController(
+        _ = ensureController(
             forControllerID: controllerID,
             ownerSessionID: sessionID
-        ) else { return }
-        controller.requestLaunchIfNeeded()
+        )
     }
 
     @discardableResult

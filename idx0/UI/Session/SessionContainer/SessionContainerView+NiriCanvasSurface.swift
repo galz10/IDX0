@@ -41,6 +41,12 @@ extension SessionContainerView {
             if niriRuntimeBySession[session.id] == nil {
                 niriRuntimeBySession[session.id] = NiriCanvasRuntimeState()
             }
+            if sessionService.selectedSessionID == session.id {
+                _ = sessionService.launchFocusedNiriTerminalIfVisible(
+                    sessionID: session.id,
+                    reason: .selectedSessionVisible
+                )
+            }
         }
         .onReceive(coordinator.$niriQuickAddRequestSessionID) { requestedSessionID in
             guard requestedSessionID == session.id else { return }
@@ -50,12 +56,16 @@ extension SessionContainerView {
             niriCancelEdgeAutoScroll(sessionID: session.id)
             niriCancelHoverActivation(sessionID: session.id)
             niriClearResizeVisualizer(sessionID: session.id)
+            sessionService.controllerBecameHidden(sessionID: session.id)
         }
         .onChange(of: layout.camera.activeColumnID) { _, _ in
             niriAnimateCameraToFocusedColumn(sessionID: session.id)
         }
         .onChange(of: layout.camera.focusedItemID) { _, _ in
             niriAnimateCameraToFocusedColumn(sessionID: session.id)
+            if sessionService.selectedSessionID == session.id {
+                _ = sessionService.launchFocusedNiriTerminalIfVisible(sessionID: session.id)
+            }
         }
         .onChange(of: layout.isOverviewOpen) { _, isOverviewOpen in
             if !isOverviewOpen {
@@ -187,14 +197,29 @@ extension SessionContainerView {
                     activeWorkspaceIndex: activeWorkspaceIndex,
                     workspaceIndex: workspaceIndex
                 ) + centeringY + cameraOffsetY
-
-                niriWorkspaceView(
-                    session: session,
+                let shouldRenderLiveWorkspace = niriShouldRenderLiveWorkspace(
                     layout: layout,
-                    workspace: workspace,
-                    workspaceIndex: workspaceIndex,
-                    metrics: metrics
+                    activeWorkspaceIndex: activeWorkspaceIndex,
+                    workspaceIndex: workspaceIndex
                 )
+
+                Group {
+                    if shouldRenderLiveWorkspace {
+                        niriWorkspaceView(
+                            session: session,
+                            layout: layout,
+                            workspace: workspace,
+                            workspaceIndex: workspaceIndex,
+                            metrics: metrics
+                        )
+                    } else {
+                        niriWorkspacePlaceholderView(
+                            workspace: workspace,
+                            workspaceIndex: workspaceIndex,
+                            metrics: metrics
+                        )
+                    }
+                }
                 .offset(
                     x: metrics.originX + cameraOffsetX,
                     y: metrics.originY + workspaceY
@@ -214,6 +239,50 @@ extension SessionContainerView {
                 sessionID: session.id,
                 isOverviewOpen: layout.isOverviewOpen
             )
+        }
+    }
+
+    func niriShouldRenderLiveWorkspace(
+        layout: NiriCanvasLayout,
+        activeWorkspaceIndex: Int,
+        workspaceIndex: Int
+    ) -> Bool {
+        if layout.isOverviewOpen {
+            return true
+        }
+        return abs(workspaceIndex - activeWorkspaceIndex) <= 1
+    }
+
+    func niriWorkspacePlaceholderView(
+        workspace: NiriWorkspace,
+        workspaceIndex: Int,
+        metrics: NiriCanvasMetrics
+    ) -> some View {
+        let columnCount = workspace.columns.count
+        let itemCount = workspace.columns.reduce(into: 0) { partialResult, column in
+            partialResult += column.items.count
+        }
+
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Workspace \(workspaceIndex + 1)")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(tc.secondaryText)
+                .padding(.horizontal, 6)
+                .frame(height: metrics.headerHeight, alignment: .leading)
+
+            RoundedRectangle(cornerRadius: 12)
+                .fill(tc.surface0.opacity(0.35))
+                .overlay {
+                    VStack(spacing: 6) {
+                        Image(systemName: "rectangle.on.rectangle.angled")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(tc.tertiaryText)
+                        Text("\(columnCount) column\(columnCount == 1 ? "" : "s") · \(itemCount) item\(itemCount == 1 ? "" : "s")")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(tc.tertiaryText)
+                    }
+                }
+                .frame(width: metrics.tileWidth, height: metrics.tileHeight * 0.5)
         }
     }
 

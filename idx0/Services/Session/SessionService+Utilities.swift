@@ -658,27 +658,47 @@ extension SessionService {
         notificationCenter.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
+    private struct PersistenceWriteSnapshot {
+        let shouldPersistSessionState: Bool
+        let settings: AppSettings
+        let sessionsPayload: SessionsFilePayload?
+        let projectsPayload: ProjectsFilePayload?
+        let inboxPayload: InboxFilePayload?
+        let tileStatePayload: PersistedTileStateFilePayload?
+        let shouldClearTileState: Bool
+    }
+
     func persistSoon() {
         persistenceDebouncer.cancel()
         persistenceDebouncer.schedule {
-            self.persistNow()
+            self.persistNowAsync()
         }
     }
 
     func persistNow() {
         persistenceDebouncer.cancel()
-        let settings = self.settings
+        let snapshot = capturePersistenceSnapshot()
+        performPersistenceWrite(snapshot: snapshot, synchronously: true)
+    }
+
+    private func persistNowAsync() {
+        let snapshot = capturePersistenceSnapshot()
+        performPersistenceWrite(snapshot: snapshot, synchronously: false)
+    }
+
+    private func capturePersistenceSnapshot() -> PersistenceWriteSnapshot {
+        let currentSettings = settings
 
         guard shouldPersistSessionState else {
-            do {
-                try settingsStore.save(settings)
-                if settings.cleanupOnClose {
-                    clearPersistedTileState()
-                }
-            } catch {
-                Logger.error("Persist failed: \(error.localizedDescription)")
-            }
-            return
+            return PersistenceWriteSnapshot(
+                shouldPersistSessionState: false,
+                settings: currentSettings,
+                sessionsPayload: nil,
+                projectsPayload: nil,
+                inboxPayload: nil,
+                tileStatePayload: nil,
+                shouldClearTileState: currentSettings.cleanupOnClose
+            )
         }
 
         let sessionsPayload = SessionsFilePayload(
@@ -695,14 +715,98 @@ extension SessionService {
             items: attentionItems
         )
 
-        do {
-            try sessionStore.save(payload: sessionsPayload)
-            try projectStore.save(payload: projectsPayload)
-            try inboxStore.save(payload: inboxPayload)
-            try settingsStore.save(settings)
-            try persistTileStateIfNeeded(settings: settings)
-        } catch {
-            Logger.error("Persist failed: \(error.localizedDescription)")
+        let tileStatePayload: PersistedTileStateFilePayload? = {
+            guard !currentSettings.cleanupOnClose else { return nil }
+
+            let validSessionIDs = Set(sessions.map(\.id))
+            var statesBySession: [UUID: PersistedSessionTileState] = [:]
+
+            for sessionID in validSessionIDs {
+                guard let tabs = tabsBySession[sessionID], !tabs.isEmpty else { continue }
+
+                let persistedTabs = tabs.map(persistedTab(from:))
+                let selectedTabID = selectedTabIDBySession[sessionID]
+                let persistedLayout = niriLayoutsBySession[sessionID].map(persistedNiriLayout(from:))
+
+                statesBySession[sessionID] = PersistedSessionTileState(
+                    tabs: persistedTabs,
+                    selectedTabID: selectedTabID,
+                    niriLayout: persistedLayout
+                )
+            }
+
+            guard !statesBySession.isEmpty else { return nil }
+            return PersistedTileStateFilePayload(
+                schemaVersion: TileStatePersistenceSchema.currentVersion,
+                sessions: statesBySession
+            )
+        }()
+
+        return PersistenceWriteSnapshot(
+            shouldPersistSessionState: true,
+            settings: currentSettings,
+            sessionsPayload: sessionsPayload,
+            projectsPayload: projectsPayload,
+            inboxPayload: inboxPayload,
+            tileStatePayload: tileStatePayload,
+            shouldClearTileState: currentSettings.cleanupOnClose || tileStatePayload == nil
+        )
+    }
+
+    private func performPersistenceWrite(snapshot: PersistenceWriteSnapshot, synchronously: Bool) {
+        let sessionStore = self.sessionStore
+        let projectStore = self.projectStore
+        let inboxStore = self.inboxStore
+        let settingsStore = self.settingsStore
+        let tileStateFileURL = self.tileStateFileURL
+
+        let writeBlock = {
+            do {
+                if snapshot.shouldPersistSessionState {
+                    guard let sessionsPayload = snapshot.sessionsPayload,
+                          let projectsPayload = snapshot.projectsPayload,
+                          let inboxPayload = snapshot.inboxPayload
+                    else {
+                        return
+                    }
+                    try sessionStore.save(payload: sessionsPayload)
+                    try projectStore.save(payload: projectsPayload)
+                    try inboxStore.save(payload: inboxPayload)
+                }
+
+                try settingsStore.save(snapshot.settings)
+
+                if snapshot.shouldClearTileState {
+                    Self.removePersistedTileStateFile(at: tileStateFileURL)
+                } else if let tileStatePayload = snapshot.tileStatePayload {
+                    try Self.writeTileStatePayload(tileStatePayload, to: tileStateFileURL)
+                }
+            } catch {
+                Logger.error("Persist failed: \(error.localizedDescription)")
+            }
         }
+
+        if synchronously {
+            persistenceQueue.sync {
+                writeBlock()
+            }
+        } else {
+            persistenceQueue.async {
+                writeBlock()
+            }
+        }
+    }
+
+    private static func writeTileStatePayload(_ payload: PersistedTileStateFilePayload, to fileURL: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(payload)
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: fileURL, options: .atomic)
+    }
+
+    private static func removePersistedTileStateFile(at fileURL: URL) {
+        try? FileManager.default.removeItem(at: fileURL)
     }
 }

@@ -34,7 +34,7 @@ struct VibeCLILaunchService {
             throw VibeCLILaunchError.sessionUnavailable
         }
 
-        controller.requestLaunchIfNeeded()
+        _ = sessionService.requestLaunch(for: sessionID, reason: .explicitAction)
         let command = launchCommand(for: tool)
         func submitCommand() {
             controller.send(text: command)

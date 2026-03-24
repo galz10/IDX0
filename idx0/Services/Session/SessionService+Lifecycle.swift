@@ -149,7 +149,11 @@ extension SessionService {
 
     func selectSession(_ id: UUID, updatesRecency: Bool) {
         guard sessions.contains(where: { $0.id == id }) else { return }
+        let previousSelectedSessionID = selectedSessionID
         selectedSessionID = id
+        if let previousSelectedSessionID, previousSelectedSessionID != id {
+            controllerBecameHidden(sessionID: previousSelectedSessionID)
+        }
         if updatesRecency {
             updateLastActive(id, at: Date())
         }
@@ -161,11 +165,14 @@ extension SessionService {
         let browserVisible = sessions.first(where: { $0.id == id })?.browserState?.isVisible == true
         let shouldPreferBrowserFocus = browserVisible && lastFocusedSurfaceBySession[id] == .browser
         let terminalController = ensureController(for: id)
-        terminalController?.requestLaunchIfNeeded()
+        let launchedTerminalControllerIDs: Set<UUID> = settings.niriCanvasEnabled
+            ? launchFocusedNiriTerminalIfVisible(sessionID: id, reason: .selectedSessionVisible)
+            : requestLaunchForActiveTerminals(in: id, reason: .selectedSessionVisible)
+        let shouldFocusTerminal = !settings.niriCanvasEnabled || !launchedTerminalControllerIDs.isEmpty
 
         if shouldPreferBrowserFocus {
             _ = browserController(for: id)
-        } else {
+        } else if shouldFocusTerminal {
             terminalController?.focus()
             setLastFocusedSurface(for: id, surface: .terminal)
             if browserVisible {
@@ -284,7 +291,9 @@ extension SessionService {
         if activate {
             selectedTabIDBySession[sessionID] = tab.id
             syncActivePaneState(for: sessionID)
-            ensureController(for: sessionID)?.requestLaunchIfNeeded()
+            if shouldLaunchVisibleTerminals(for: sessionID) {
+                _ = requestLaunchForActiveTerminals(in: sessionID, reason: .activeSplitPaneVisible)
+            }
             ensureController(for: sessionID)?.focus()
             setLastFocusedSurface(for: sessionID, surface: .terminal)
         }
@@ -312,7 +321,9 @@ extension SessionService {
         removeNiriCells(sessionID: sessionID, matchingTabID: closingTab.id)
         syncNiriFocusWithSelectedTab(sessionID: sessionID)
         syncActivePaneState(for: sessionID)
-        ensureController(for: sessionID)?.requestLaunchIfNeeded()
+        if shouldLaunchVisibleTerminals(for: sessionID) {
+            _ = requestLaunchForActiveTerminals(in: sessionID, reason: .activeSplitPaneVisible)
+        }
         if selectedSessionID == sessionID {
             ensureController(for: sessionID)?.focus()
         }
@@ -327,7 +338,9 @@ extension SessionService {
         selectedTabIDBySession[sessionID] = tabs[nextIndex].id
         syncNiriFocusWithSelectedTab(sessionID: sessionID)
         syncActivePaneState(for: sessionID)
-        ensureController(for: sessionID)?.requestLaunchIfNeeded()
+        if shouldLaunchVisibleTerminals(for: sessionID) {
+            _ = requestLaunchForActiveTerminals(in: sessionID, reason: .activeSplitPaneVisible)
+        }
         if selectedSessionID == sessionID {
             ensureController(for: sessionID)?.focus()
         }
@@ -342,7 +355,9 @@ extension SessionService {
         selectedTabIDBySession[sessionID] = tabs[previousIndex].id
         syncNiriFocusWithSelectedTab(sessionID: sessionID)
         syncActivePaneState(for: sessionID)
-        ensureController(for: sessionID)?.requestLaunchIfNeeded()
+        if shouldLaunchVisibleTerminals(for: sessionID) {
+            _ = requestLaunchForActiveTerminals(in: sessionID, reason: .activeSplitPaneVisible)
+        }
         if selectedSessionID == sessionID {
             ensureController(for: sessionID)?.focus()
         }
@@ -354,7 +369,9 @@ extension SessionService {
         selectedTabIDBySession[sessionID] = tabID
         syncNiriFocusWithSelectedTab(sessionID: sessionID)
         syncActivePaneState(for: sessionID)
-        ensureController(for: sessionID)?.requestLaunchIfNeeded()
+        if shouldLaunchVisibleTerminals(for: sessionID) {
+            _ = requestLaunchForActiveTerminals(in: sessionID, reason: .activeSplitPaneVisible)
+        }
         if selectedSessionID == sessionID {
             ensureController(for: sessionID)?.focus()
         }
@@ -414,6 +431,9 @@ extension SessionService {
         tabs[activeIndex] = tab
         tabsBySession[sessionID] = tabs
         syncActivePaneState(for: sessionID)
+        if shouldLaunchVisibleTerminals(for: sessionID) {
+            _ = requestLaunchForActiveTerminals(in: sessionID, reason: .activeSplitPaneVisible)
+        }
     }
 
     /// Close the currently focused pane in the active tab for a session.
@@ -468,6 +488,9 @@ extension SessionService {
             tabs[activeIndex] = tab
             tabsBySession[sessionID] = tabs
             syncActivePaneState(for: sessionID)
+            if shouldLaunchVisibleTerminals(for: sessionID) {
+                _ = requestLaunch(for: ids[nextIdx], ownerSessionID: sessionID, reason: .activeSplitPaneVisible)
+            }
             ensurePaneController(for: ids[nextIdx])?.focus()
         }
     }
@@ -487,6 +510,9 @@ extension SessionService {
             tabs[activeIndex] = tab
             tabsBySession[sessionID] = tabs
             syncActivePaneState(for: sessionID)
+            if shouldLaunchVisibleTerminals(for: sessionID) {
+                _ = requestLaunch(for: ids[prevIdx], ownerSessionID: sessionID, reason: .activeSplitPaneVisible)
+            }
             ensurePaneController(for: ids[prevIdx])?.focus()
         }
     }
@@ -500,6 +526,9 @@ extension SessionService {
         tabs[activeIndex] = tab
         tabsBySession[sessionID] = tabs
         syncActivePaneState(for: sessionID)
+        if shouldLaunchVisibleTerminals(for: sessionID) {
+            _ = requestLaunch(for: controllerID, ownerSessionID: sessionID, reason: .activeSplitPaneVisible)
+        }
     }
 
     func wireControllerCallbacks(_ controller: TerminalSessionController, sessionID: UUID) {
