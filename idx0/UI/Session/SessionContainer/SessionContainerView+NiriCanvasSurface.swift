@@ -14,6 +14,10 @@ extension SessionContainerView {
                 .padding(.top, 38)
                 .padding(.leading, 10)
         }
+        .overlay {
+            niriTileSpotlightOverlay(sessionID: session.id)
+                .animation(.easeOut(duration: 0.15), value: niriQuickAddMenuPresented)
+        }
         .overlay(alignment: .topTrailing) {
             if let visualizer = niriActiveResizeVisualizer(
                 sessionID: session.id,

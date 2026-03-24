@@ -313,9 +313,9 @@ struct CommandPaletteOverlay: View {
                     run: { if let id = selectedID { _ = sessionService.setupVSCodeBrowserDebug(for: id) } }
                 ),
                 PaletteAction(
-                    id: "niri-open-add-tile-menu", icon: "plus.circle", title: "Niri: Open Add Tile Menu",
-                    detail: "Open the quick Add Tile menu",
-                    shortcut: shortcutLabel(.niriOpenAddTileMenu), searchText: "niri add tile menu quick add plus",
+                    id: "niri-open-add-tile-menu", icon: "plus.circle", title: "Add Tile",
+                    detail: "Open the tile spotlight to add a new tile",
+                    shortcut: shortcutLabel(.niriOpenAddTileMenu), searchText: "add tile spotlight new terminal browser app plus",
                     isEnabled: selectedID != nil,
                     run: { _ = coordinator.performCommand(.niriOpenAddTileMenu) }
                 ),

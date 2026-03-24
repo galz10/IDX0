@@ -52,165 +52,118 @@ extension SessionContainerView {
         Button {
             niriQuickAddMenuPresented = true
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "plus")
-                    .font(.system(size: 11, weight: .bold))
-                Text("Add")
-                    .font(.system(size: 10, weight: .semibold))
-            }
-            .foregroundStyle(tc.primaryText)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(tc.surface1.opacity(0.95))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(tc.divider.opacity(0.9), lineWidth: 1)
-            }
+            Image(systemName: "plus")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(niriQuickAddMenuPresented ? tc.accent : tc.primaryText)
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(niriQuickAddMenuPresented ? tc.accent.opacity(0.15) : tc.surface1.opacity(0.95))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(
+                            niriQuickAddMenuPresented ? tc.accent.opacity(0.4) : tc.divider.opacity(0.9),
+                            lineWidth: 1
+                        )
+                }
         }
         .buttonStyle(.plain)
         .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 2)
-        .help("Add Tile")
-        .popover(
-            isPresented: $niriQuickAddMenuPresented,
-            attachmentAnchor: .point(.topLeading),
-            arrowEdge: .top
-        ) {
-            niriQuickAddMenuContent(sessionID: sessionID)
-        }
+        .help("Add Tile (\(niriAddTileShortcutLabel))")
+        .animation(.easeOut(duration: 0.12), value: niriQuickAddMenuPresented)
     }
 
+    /// Spotlight overlay placed at the canvas surface level for proper full-area coverage.
     @ViewBuilder
-    func niriQuickAddMenuContent(sessionID: UUID) -> some View {
-        let installedTools = workflowService.vibeTools.filter(\.isInstalled)
-        let visibleApps = NiriAppUIVisibility.quickAddApps(from: sessionService.registeredNiriApps)
+    func niriTileSpotlightOverlay(sessionID: UUID) -> some View {
+        if niriQuickAddMenuPresented {
+            ZStack(alignment: .topLeading) {
+                // Dim backdrop
+                Color.black.opacity(0.3)
+                    .contentShape(Rectangle())
+                    .onTapGesture { niriQuickAddMenuPresented = false }
 
-        VStack(alignment: .leading, spacing: 2) {
-            // Header
-            Text("Add Tile")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .textCase(.uppercase)
-                .foregroundStyle(tc.tertiaryText)
-                .padding(.horizontal, 6)
-                .padding(.bottom, 4)
-
-            // Apps section
-            ForEach(visibleApps, id: \.id) { app in
-                Button {
-                    niriQuickAddMenuPresented = false
-                    _ = sessionService.niriAddAppRight(in: sessionID, appID: app.id)
-                } label: {
-                    niriQuickAddRow(
-                        icon: app.icon,
-                        iconImageName: app.iconImageName,
-                        title: app.displayName,
-                        subtitle: app.menuSubtitle
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-
-            Button {
-                niriQuickAddMenuPresented = false
-                _ = sessionService.niriAddBrowserRight(in: sessionID)
-            } label: {
-                niriQuickAddRow(
-                    icon: "globe",
-                    title: "Browser",
-                    subtitle: "Open web view tile"
+                // Spotlight positioned near the + button
+                NiriTileSpotlight(
+                    isPresented: $niriQuickAddMenuPresented,
+                    items: niriSpotlightItems(sessionID: sessionID)
                 )
+                .padding(.top, 74) // below toolbar (28) + button area (38) + gap (8)
+                .padding(.leading, 10)
             }
-            .buttonStyle(.plain)
-
-            // Divider
-            Rectangle()
-                .fill(tc.divider)
-                .frame(height: 1)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 6)
-
-            // Agentic CLIs section
-            Text("Agentic CLIs")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .textCase(.uppercase)
-                .foregroundStyle(tc.tertiaryText)
-                .padding(.horizontal, 6)
-                .padding(.bottom, 4)
-
-            if installedTools.isEmpty {
-                Text("No installed CLIs found.")
-                    .font(.system(size: 10))
-                    .foregroundStyle(tc.tertiaryText)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
-            } else {
-                ForEach(installedTools, id: \.id) { tool in
-                    Button {
-                        niriQuickAddMenuPresented = false
-                        niriLaunchToolInNewTile(sessionID: sessionID, toolID: tool.id)
-                    } label: {
-                        niriQuickAddRow(
-                            icon: niriToolIconName(for: tool.id),
-                            title: tool.displayName,
-                            subtitle: tool.executableName
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            .transition(.opacity)
         }
-        .padding(10)
-        .frame(width: 260, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(tc.sidebarBackground)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(tc.surface2.opacity(0.5), lineWidth: 1)
-        }
-        .padding(6)
     }
 
-    @ViewBuilder
-    func niriQuickAddRow(icon: String, iconImageName: String? = nil, title: String, subtitle: String) -> some View {
-        HStack(spacing: 10) {
-            Group {
-                if let imageName = iconImageName {
-                    Image(imageName)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 14, height: 14)
-                } else {
-                    Image(systemName: icon)
-                        .font(.system(size: 12, weight: .medium))
-                }
-            }
-            .foregroundStyle(tc.secondaryText)
-            .frame(width: 24, height: 24)
-            .background(tc.surface1, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    // MARK: - Spotlight Items
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(tc.primaryText)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(tc.tertiaryText)
-                    .lineLimit(1)
+    func niriSpotlightItems(sessionID: UUID) -> [TileSpotlightItem] {
+        var items: [TileSpotlightItem] = []
+
+        // Terminal tile (always first)
+        items.append(TileSpotlightItem(
+            id: "terminal",
+            icon: "terminal",
+            title: "Terminal",
+            subtitle: "New terminal tile",
+            searchText: "terminal shell console bash zsh",
+            run: {
+                _ = self.sessionService.niriAddTerminalRight(in: sessionID)
             }
-            Spacer(minLength: 0)
+        ))
+
+        // Registered apps
+        let visibleApps = NiriAppUIVisibility.quickAddApps(from: sessionService.registeredNiriApps)
+        for app in visibleApps {
+            items.append(TileSpotlightItem(
+                id: "app-\(app.id)",
+                icon: app.icon,
+                iconImageName: app.iconImageName,
+                title: app.displayName,
+                subtitle: app.menuSubtitle,
+                searchText: "\(app.displayName.lowercased()) \(app.id) \(app.menuSubtitle.lowercased()) app tile",
+                run: {
+                    _ = self.sessionService.niriAddAppRight(in: sessionID, appID: app.id)
+                }
+            ))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.clear)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+        // Browser tile
+        items.append(TileSpotlightItem(
+            id: "browser",
+            icon: "globe",
+            title: "Browser",
+            subtitle: "Open web view tile",
+            searchText: "browser web view globe url http",
+            run: {
+                _ = self.sessionService.niriAddBrowserRight(in: sessionID)
+            }
+        ))
+
+        // Agentic CLIs
+        let installedTools = workflowService.vibeTools.filter(\.isInstalled)
+        for tool in installedTools {
+            items.append(TileSpotlightItem(
+                id: "tool-\(tool.id)",
+                icon: niriToolIconName(for: tool.id),
+                title: tool.displayName,
+                subtitle: tool.executableName,
+                searchText: "\(tool.displayName.lowercased()) \(tool.executableName.lowercased()) cli agent agentic tool",
+                run: {
+                    self.niriLaunchToolInNewTile(sessionID: sessionID, toolID: tool.id)
+                }
+            ))
+        }
+
+        return items
+    }
+
+    private var niriAddTileShortcutLabel: String {
+        ShortcutRegistry.shared.displayLabel(
+            for: .niriOpenAddTileMenu,
+            settings: sessionService.settings
+        ) ?? "+"
     }
 
     func niriLaunchToolInNewTile(sessionID: UUID, toolID: String) {
