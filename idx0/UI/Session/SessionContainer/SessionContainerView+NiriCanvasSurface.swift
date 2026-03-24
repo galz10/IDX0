@@ -9,11 +9,25 @@ extension SessionContainerView {
         let runtime = niriRuntimeBySession[session.id] ?? NiriCanvasRuntimeState()
 
         return niriCanvasSurfaceBody(session: session, layout: layout, runtime: runtime)
+        .overlay {
+            // Invisible dismiss layer when spotlight is open
+            if niriQuickAddMenuPresented {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(duration: 0.2, bounce: 0.1)) {
+                            niriQuickAddMenuPresented = false
+                        }
+                    }
+            }
+        }
         .overlay(alignment: .topLeading) {
             niriCanvasQuickAddButton(sessionID: session.id)
                 .padding(.top, 38)
                 .padding(.leading, 10)
         }
+        .animation(.spring(duration: 0.25, bounce: 0.1), value: niriQuickAddMenuPresented)
         .overlay(alignment: .topTrailing) {
             if let visualizer = niriActiveResizeVisualizer(
                 sessionID: session.id,
@@ -44,12 +58,22 @@ extension SessionContainerView {
         }
         .onReceive(coordinator.$niriQuickAddRequestSessionID) { requestedSessionID in
             guard requestedSessionID == session.id else { return }
-            niriQuickAddMenuPresented = true
+            withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+                niriQuickAddMenuPresented = true
+            }
+            coordinator.niriQuickAddRequestSessionID = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .niriSpotlightDismissRequested)) { _ in
+            guard niriQuickAddMenuPresented else { return }
+            withAnimation(.spring(duration: 0.2, bounce: 0.1)) {
+                niriQuickAddMenuPresented = false
+            }
         }
         .onDisappear {
             niriCancelEdgeAutoScroll(sessionID: session.id)
             niriCancelHoverActivation(sessionID: session.id)
             niriClearResizeVisualizer(sessionID: session.id)
+            niriQuickAddMenuPresented = false
         }
         .onChange(of: layout.camera.activeColumnID) { _, _ in
             niriAnimateCameraToFocusedColumn(sessionID: session.id)

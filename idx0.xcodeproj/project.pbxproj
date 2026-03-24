@@ -179,6 +179,7 @@
 		F952C3D40F69094157444A5D /* GeneralSettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93758CF7FA55F2FE32FD1AF3 /* GeneralSettingsTab.swift */; };
 		FACA5BACACED8FA259DA086F /* SessionContainerView+NiriCanvasSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AA6DAB9923306A0236363D1 /* SessionContainerView+NiriCanvasSurface.swift */; };
 		FB60AE91F3B4A3DB36E008F3 /* SessionContainerView+NiriQuickAddToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0913EC98AEA1A5769872F12E /* SessionContainerView+NiriQuickAddToolbar.swift */; };
+		2AE9DE55597E704B7B99B0EF /* NiriTileSpotlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FA0B16E5CCCBFB1FAA5620C /* NiriTileSpotlight.swift */; };
 		FE76D0C4B68B4C4FF662C40E /* WorkflowServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEA146F38A368A5A2BBAD9E0 /* WorkflowServiceTests.swift */; };
 		FFA5BEDE9166726D32781C3A /* SessionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603A01395B9650650ACB1F9B /* SessionService.swift */; };
 /* End PBXBuildFile section */
@@ -202,6 +203,7 @@
 		084CE6508D3146437C560DE3 /* AttentionCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttentionCenter.swift; sourceTree = "<group>"; };
 		0884C8A5D1749BC2E9960939 /* SessionSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionSidebarView.swift; sourceTree = "<group>"; };
 		0913EC98AEA1A5769872F12E /* SessionContainerView+NiriQuickAddToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionContainerView+NiriQuickAddToolbar.swift"; sourceTree = "<group>"; };
+		6FA0B16E5CCCBFB1FAA5620C /* NiriTileSpotlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NiriTileSpotlight.swift; sourceTree = "<group>"; };
 		09FF7D2151EF790BBDC1581E /* CommandPaletteOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteOverlay.swift; sourceTree = "<group>"; };
 		0D41A657FCE96AB8403908B5 /* SessionContainerNiriWorkspaceLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionContainerNiriWorkspaceLayout.swift; sourceTree = "<group>"; };
 		0E0653D39F91E2565C8E6CD3 /* VibeCLITool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VibeCLITool.swift; sourceTree = "<group>"; };
@@ -458,6 +460,7 @@
 				77D07E1D74241531F78C9443 /* SessionContainerView+NiriItemViews.swift */,
 				CDE12E08D37699A7663BB063 /* SessionContainerView+NiriMetrics.swift */,
 				0913EC98AEA1A5769872F12E /* SessionContainerView+NiriQuickAddToolbar.swift */,
+				6FA0B16E5CCCBFB1FAA5620C /* NiriTileSpotlight.swift */,
 				47EAE9A64AE413ADDB3582DD /* SessionContainerView+NiriResizeVisualizer.swift */,
 				E68FA8BE49E49930255DBBDA /* SessionContainerView+NiriSupportTypes.swift */,
 				42954794B6E7533BCCF88CC3 /* SessionContainerView+NiriTiles.swift */,
@@ -1133,6 +1136,7 @@
 				3F370869C5D7E4FFB73FE800 /* SessionContainerView+NiriItemViews.swift in Sources */,
 				8673AB3379194493EB7BAE19 /* SessionContainerView+NiriMetrics.swift in Sources */,
 				FB60AE91F3B4A3DB36E008F3 /* SessionContainerView+NiriQuickAddToolbar.swift in Sources */,
+				2AE9DE55597E704B7B99B0EF /* NiriTileSpotlight.swift in Sources */,
 				65172983E398238D0E4AFD07 /* SessionContainerView+NiriResizeVisualizer.swift in Sources */,
 				08DD928F54822DCB46AAC44C /* SessionContainerView+NiriSupportTypes.swift in Sources */,
 				12E88F91FCDA7BC82CEF2C57 /* SessionContainerView+NiriTiles.swift in Sources */,
