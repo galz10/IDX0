@@ -38,6 +38,34 @@ struct InlineAdvancedSettings: View {
                 .frame(maxWidth: 280)
             }
 
+            SettingRowView(
+                label: "Terminal Startup Command Template",
+                caption: "Optional command sent when a new terminal controller starts. Use ${WORKDIR} and ${SESSION_ID}. Leave empty to disable."
+            ) {
+                TextField(
+                    "cd ${WORKDIR}",
+                    text: Binding(
+                        get: { sessionService.settings.terminalStartupCommandTemplate ?? "" },
+                        set: { newValue in
+                            sessionService.saveSettings { settings in
+                                let cleaned = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                                settings.terminalStartupCommandTemplate = cleaned.isEmpty ? nil : cleaned
+                            }
+                        }
+                    )
+                )
+                .textFieldStyle(.plain)
+                .font(.system(size: 11, design: .monospaced))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(tc.surface0, in: RoundedRectangle(cornerRadius: 4))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(tc.surface2.opacity(0.5), lineWidth: 0.5)
+                )
+                .frame(maxWidth: 420)
+            }
+
             SettingDivider()
             SettingSectionHeader(title: "Reset")
 

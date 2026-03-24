@@ -339,6 +339,7 @@ extension SessionService {
             migrateLegacyNiriCells(layout: &existing)
             normalizeNiriLayout(&existing)
             niriLayoutsBySession[sessionID] = existing
+            clearNiriFocusedTileZoomIfInvalid(sessionID: sessionID, layout: existing)
             return
         }
 
@@ -346,18 +347,14 @@ extension SessionService {
         guard let tabID = selectedTabID(for: sessionID) ?? tabsBySession[sessionID]?.first?.id else { return }
 
         let itemID = UUID()
-        let item = NiriLayoutItem(
-            id: itemID,
-            ref: .terminal(tabID: tabID)
-        )
+        let item = makeNiriLayoutItem(id: itemID, ref: .terminal(tabID: tabID))
         let workspace = NiriWorkspace(
             id: UUID(),
             columns: [
-                NiriColumn(
+                makeNiriColumn(
                     id: UUID(),
                     items: [item],
-                    focusedItemID: itemID,
-                    displayMode: settings.niri.defaultColumnDisplayMode
+                    focusedItemID: itemID
                 )
             ]
         )
@@ -373,6 +370,7 @@ extension SessionService {
         )
         normalizeNiriLayout(&layout)
         niriLayoutsBySession[sessionID] = layout
+        clearNiriFocusedTileZoomIfInvalid(sessionID: sessionID, layout: layout)
     }
 
     struct NiriItemPath {
@@ -524,6 +522,41 @@ extension SessionService {
         }
     }
 
+    func makeNiriLayoutItem(id: UUID, ref: NiriItemRef) -> NiriLayoutItem {
+        NiriLayoutItem(
+            id: id,
+            ref: ref,
+            preferredHeight: niriDefaultNewTileHeight()
+        )
+    }
+
+    func makeNiriColumn(id: UUID, items: [NiriLayoutItem], focusedItemID: UUID?) -> NiriColumn {
+        NiriColumn(
+            id: id,
+            items: items,
+            focusedItemID: focusedItemID,
+            displayMode: settings.niri.defaultColumnDisplayMode,
+            preferredWidth: niriDefaultNewColumnWidth()
+        )
+    }
+
+    func niriDefaultNewColumnWidth() -> CGFloat? {
+        guard let configured = settings.niri.defaultNewColumnWidth else { return nil }
+        return max(180, min(CGFloat(configured), 2400))
+    }
+
+    func niriDefaultNewTileHeight() -> CGFloat? {
+        guard let configured = settings.niri.defaultNewTileHeight else { return nil }
+        return max(120, min(CGFloat(configured), 2400))
+    }
+
+    func clearNiriFocusedTileZoomIfInvalid(sessionID: UUID, layout: NiriCanvasLayout) {
+        guard let zoomedItemID = niriFocusedTileZoomItemIDBySession[sessionID] else { return }
+        if findNiriItemPath(layout: layout, itemID: zoomedItemID) == nil {
+            niriFocusedTileZoomItemIDBySession.removeValue(forKey: sessionID)
+        }
+    }
+
     func migrateLegacyNiriCells(layout: inout NiriCanvasLayout) {
         guard !layout.legacyCells.isEmpty, layout.workspaces.isEmpty else { return }
 
@@ -578,12 +611,11 @@ extension SessionService {
            }),
            let workspaceIndex = activeWorkspaceIndex(layout: layout) {
             let itemID = UUID()
-            let item = NiriLayoutItem(id: itemID, ref: .terminal(tabID: selectedTabID))
-            let column = NiriColumn(
+            let item = makeNiriLayoutItem(id: itemID, ref: .terminal(tabID: selectedTabID))
+            let column = makeNiriColumn(
                 id: UUID(),
                 items: [item],
-                focusedItemID: itemID,
-                displayMode: settings.niri.defaultColumnDisplayMode
+                focusedItemID: itemID
             )
             layout.workspaces[workspaceIndex].columns.append(column)
             layout.camera.activeWorkspaceID = layout.workspaces[workspaceIndex].id
@@ -593,6 +625,7 @@ extension SessionService {
 
         normalizeNiriLayout(&layout)
         niriLayoutsBySession[sessionID] = layout
+        clearNiriFocusedTileZoomIfInvalid(sessionID: sessionID, layout: layout)
     }
 
     func removeNiriItem(sessionID: UUID, itemID: UUID) {
@@ -613,6 +646,7 @@ extension SessionService {
 
         normalizeNiriLayout(&layout)
         niriLayoutsBySession[sessionID] = layout
+        clearNiriFocusedTileZoomIfInvalid(sessionID: sessionID, layout: layout)
         if case .app(let removedAppID) = removed.ref,
            niriAppItemIDs(in: layout, appID: removedAppID).isEmpty {
             removedAppDescriptor?.cleanupSessionArtifacts?(self, sessionID)
@@ -659,12 +693,11 @@ extension SessionService {
 
         if let workspaceIndex = activeWorkspaceIndex(layout: layout) {
             let itemID = UUID()
-            let item = NiriLayoutItem(id: itemID, ref: .terminal(tabID: selectedTabID))
-            let column = NiriColumn(
+            let item = makeNiriLayoutItem(id: itemID, ref: .terminal(tabID: selectedTabID))
+            let column = makeNiriColumn(
                 id: UUID(),
                 items: [item],
-                focusedItemID: itemID,
-                displayMode: settings.niri.defaultColumnDisplayMode
+                focusedItemID: itemID
             )
             layout.workspaces[workspaceIndex].columns.append(column)
             layout.camera.activeWorkspaceID = layout.workspaces[workspaceIndex].id
@@ -672,6 +705,7 @@ extension SessionService {
             layout.camera.focusedItemID = itemID
             normalizeNiriLayout(&layout)
             niriLayoutsBySession[sessionID] = layout
+            clearNiriFocusedTileZoomIfInvalid(sessionID: sessionID, layout: layout)
         }
     }
 

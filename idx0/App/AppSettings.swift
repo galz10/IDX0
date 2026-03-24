@@ -183,6 +183,8 @@ struct NiriSettings: Codable, Equatable {
     var edgeWorkspaceSwitch: NiriEdgeWorkspaceSwitchSettings
     var hotCorners: [NiriHotCorner]
     var defaultColumnDisplayMode: NiriColumnDisplayMode
+    var defaultNewColumnWidth: Double?
+    var defaultNewTileHeight: Double?
 
     init(
         snapEnabled: Bool = true,
@@ -191,7 +193,9 @@ struct NiriSettings: Codable, Equatable {
         edgeViewScroll: NiriEdgeViewScrollSettings = NiriEdgeViewScrollSettings(),
         edgeWorkspaceSwitch: NiriEdgeWorkspaceSwitchSettings = NiriEdgeWorkspaceSwitchSettings(),
         hotCorners: [NiriHotCorner] = [.topLeft],
-        defaultColumnDisplayMode: NiriColumnDisplayMode = .normal
+        defaultColumnDisplayMode: NiriColumnDisplayMode = .normal,
+        defaultNewColumnWidth: Double? = nil,
+        defaultNewTileHeight: Double? = nil
     ) {
         self.snapEnabled = snapEnabled
         self.resizeCameraVisualizerEnabled = resizeCameraVisualizerEnabled
@@ -200,6 +204,8 @@ struct NiriSettings: Codable, Equatable {
         self.edgeWorkspaceSwitch = edgeWorkspaceSwitch
         self.hotCorners = hotCorners
         self.defaultColumnDisplayMode = defaultColumnDisplayMode
+        self.defaultNewColumnWidth = defaultNewColumnWidth
+        self.defaultNewTileHeight = defaultNewTileHeight
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -210,6 +216,8 @@ struct NiriSettings: Codable, Equatable {
         case edgeWorkspaceSwitch
         case hotCorners
         case defaultColumnDisplayMode
+        case defaultNewColumnWidth
+        case defaultNewTileHeight
     }
 
     init(from decoder: Decoder) throws {
@@ -221,6 +229,12 @@ struct NiriSettings: Codable, Equatable {
         edgeWorkspaceSwitch = try container.decodeIfPresent(NiriEdgeWorkspaceSwitchSettings.self, forKey: .edgeWorkspaceSwitch) ?? NiriEdgeWorkspaceSwitchSettings()
         hotCorners = try container.decodeIfPresent([NiriHotCorner].self, forKey: .hotCorners) ?? [.topLeft]
         defaultColumnDisplayMode = try container.decodeIfPresent(NiriColumnDisplayMode.self, forKey: .defaultColumnDisplayMode) ?? .normal
+        defaultNewColumnWidth = Self.clampWidth(
+            try container.decodeIfPresent(Double.self, forKey: .defaultNewColumnWidth)
+        )
+        defaultNewTileHeight = Self.clampHeight(
+            try container.decodeIfPresent(Double.self, forKey: .defaultNewTileHeight)
+        )
     }
 
     func encode(to encoder: Encoder) throws {
@@ -232,6 +246,18 @@ struct NiriSettings: Codable, Equatable {
         try container.encode(edgeWorkspaceSwitch, forKey: .edgeWorkspaceSwitch)
         try container.encode(hotCorners, forKey: .hotCorners)
         try container.encode(defaultColumnDisplayMode, forKey: .defaultColumnDisplayMode)
+        try container.encodeIfPresent(Self.clampWidth(defaultNewColumnWidth), forKey: .defaultNewColumnWidth)
+        try container.encodeIfPresent(Self.clampHeight(defaultNewTileHeight), forKey: .defaultNewTileHeight)
+    }
+
+    private static func clampWidth(_ value: Double?) -> Double? {
+        guard let value else { return nil }
+        return max(180, min(value, 2400))
+    }
+
+    private static func clampHeight(_ value: Double?) -> Double? {
+        guard let value else { return nil }
+        return max(120, min(value, 2400))
     }
 }
 
@@ -243,6 +269,7 @@ struct AppSettings: Codable, Equatable {
     var inboxVisible: Bool
     var defaultCreateWorktreeForRepoSessions: Bool
     var preferredShellPath: String?
+    var terminalStartupCommandTemplate: String?
     var hasSeenFirstRun: Bool
     var hasSeenNiriOnboarding: Bool
     var defaultSandboxProfile: SandboxProfile
@@ -269,6 +296,7 @@ struct AppSettings: Codable, Equatable {
         inboxVisible: Bool = false,
         defaultCreateWorktreeForRepoSessions: Bool = true,
         preferredShellPath: String? = nil,
+        terminalStartupCommandTemplate: String? = nil,
         hasSeenFirstRun: Bool = false,
         hasSeenNiriOnboarding: Bool = false,
         defaultSandboxProfile: SandboxProfile = .fullAccess,
@@ -294,6 +322,7 @@ struct AppSettings: Codable, Equatable {
         self.inboxVisible = inboxVisible
         self.defaultCreateWorktreeForRepoSessions = defaultCreateWorktreeForRepoSessions
         self.preferredShellPath = preferredShellPath
+        self.terminalStartupCommandTemplate = terminalStartupCommandTemplate
         self.hasSeenFirstRun = hasSeenFirstRun
         self.hasSeenNiriOnboarding = hasSeenNiriOnboarding
         self.defaultSandboxProfile = defaultSandboxProfile
@@ -322,6 +351,7 @@ struct AppSettings: Codable, Equatable {
         case openLinksInDefaultBrowser
         case defaultCreateWorktreeForRepoSessions
         case preferredShellPath
+        case terminalStartupCommandTemplate
         case hasSeenFirstRun
         case hasSeenNiriOnboarding
         case defaultSandboxProfile
@@ -350,6 +380,7 @@ struct AppSettings: Codable, Equatable {
         inboxVisible = try container.decodeIfPresent(Bool.self, forKey: .inboxVisible) ?? false
         defaultCreateWorktreeForRepoSessions = try container.decodeIfPresent(Bool.self, forKey: .defaultCreateWorktreeForRepoSessions) ?? true
         preferredShellPath = try container.decodeIfPresent(String.self, forKey: .preferredShellPath)
+        terminalStartupCommandTemplate = try container.decodeIfPresent(String.self, forKey: .terminalStartupCommandTemplate)
         hasSeenFirstRun = try container.decodeIfPresent(Bool.self, forKey: .hasSeenFirstRun) ?? false
         hasSeenNiriOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasSeenNiriOnboarding) ?? false
         defaultSandboxProfile = try container.decodeIfPresent(SandboxProfile.self, forKey: .defaultSandboxProfile) ?? .fullAccess
@@ -385,6 +416,7 @@ struct AppSettings: Codable, Equatable {
         try container.encode(inboxVisible, forKey: .inboxVisible)
         try container.encode(defaultCreateWorktreeForRepoSessions, forKey: .defaultCreateWorktreeForRepoSessions)
         try container.encodeIfPresent(preferredShellPath, forKey: .preferredShellPath)
+        try container.encodeIfPresent(terminalStartupCommandTemplate, forKey: .terminalStartupCommandTemplate)
         try container.encode(hasSeenFirstRun, forKey: .hasSeenFirstRun)
         try container.encode(hasSeenNiriOnboarding, forKey: .hasSeenNiriOnboarding)
         try container.encode(defaultSandboxProfile, forKey: .defaultSandboxProfile)

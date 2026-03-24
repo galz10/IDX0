@@ -150,7 +150,7 @@ struct BrowserToolbar: View {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 12, weight: .medium))
                     .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
+                    .idxHitTarget()
             }
             .buttonStyle(.plain)
             .disabled(!controller.canGoBack)
@@ -161,7 +161,7 @@ struct BrowserToolbar: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .medium))
                     .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
+                    .idxHitTarget()
             }
             .buttonStyle(.plain)
             .disabled(!controller.canGoForward)
@@ -173,7 +173,7 @@ struct BrowserToolbar: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .medium))
                         .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
+                        .idxHitTarget()
                 }
                 .buttonStyle(.plain)
                 .help("Stop")
@@ -182,7 +182,7 @@ struct BrowserToolbar: View {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 11, weight: .medium))
                         .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
+                        .idxHitTarget()
                 }
                 .buttonStyle(.plain)
                 .help("Reload")
@@ -520,4 +520,3 @@ struct BrowserToolbar: View {
         showSuggestions = !merged.isEmpty
     }
 }
-

@@ -67,6 +67,7 @@ final class SessionService: ObservableObject {
     @Published var tabsBySession: [UUID: [SessionTerminalTab]] = [:]
     @Published var selectedTabIDBySession: [UUID: UUID] = [:]
     @Published var niriLayoutsBySession: [UUID: NiriCanvasLayout] = [:]
+    @Published var niriFocusedTileZoomItemIDBySession: [UUID: UUID] = [:]
 
     /// Pane tree per session. nil means single pane (no splits).
     var paneTrees: [UUID: PaneNode] = [:]

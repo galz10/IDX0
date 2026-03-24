@@ -5,7 +5,10 @@ final class ShortcutRegistryTests: XCTestCase {
     func testDefaultSettingsHaveNoShortcutConflicts() {
         let validator = ShortcutValidator()
         let conflicts = validator.conflicts(for: AppSettings())
-        XCTAssertTrue(conflicts.isEmpty)
+        XCTAssertTrue(
+            conflicts.isEmpty,
+            conflicts.map(\.message).joined(separator: "\n")
+        )
     }
 
     func testPrimaryBindingUsesMacDefaultInBothMode() {
@@ -42,6 +45,42 @@ final class ShortcutRegistryTests: XCTestCase {
 
         XCTAssertEqual(binding?.key, .l)
         XCTAssertEqual(binding?.modifiers, [.control])
+    }
+
+    func testNiriAddTerminalRightUsesModTInNiriFirstMode() {
+        let registry = ShortcutRegistry.shared
+        var settings = AppSettings()
+        settings.keybindingMode = .niriFirst
+        settings.modKeySetting = .commandOption
+
+        let binding = registry.primaryBinding(for: .niriAddTerminalRight, settings: settings)
+
+        XCTAssertEqual(binding?.key, .t)
+        XCTAssertEqual(binding?.modifiers, [.command, .option])
+    }
+
+    func testClosePaneUsesModWInNiriFirstMode() {
+        let registry = ShortcutRegistry.shared
+        var settings = AppSettings()
+        settings.keybindingMode = .niriFirst
+        settings.modKeySetting = .commandOption
+
+        let binding = registry.primaryBinding(for: .closePane, settings: settings)
+
+        XCTAssertEqual(binding?.key, .w)
+        XCTAssertEqual(binding?.modifiers, [.command, .option])
+    }
+
+    func testNiriTabbedToggleUsesModShiftTInNiriFirstMode() {
+        let registry = ShortcutRegistry.shared
+        var settings = AppSettings()
+        settings.keybindingMode = .niriFirst
+        settings.modKeySetting = .commandOption
+
+        let binding = registry.primaryBinding(for: .niriToggleColumnTabbedDisplay, settings: settings)
+
+        XCTAssertEqual(binding?.key, .t)
+        XCTAssertEqual(binding?.modifiers, [.command, .option, .shift])
     }
 
     func testCustomBindingOverridesPrimaryBinding() {

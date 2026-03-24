@@ -17,6 +17,9 @@ final class AppSettingsKeyboardTests: XCTestCase {
         XCTAssertTrue(decoded.customKeybindings.isEmpty)
         XCTAssertFalse(decoded.hasSeenNiriOnboarding)
         XCTAssertFalse(decoded.cleanupOnClose)
+        XCTAssertNil(decoded.terminalStartupCommandTemplate)
+        XCTAssertNil(decoded.niri.defaultNewColumnWidth)
+        XCTAssertNil(decoded.niri.defaultNewTileHeight)
     }
 
     func testRoundTripPersistsKeyboardSettings() throws {
@@ -25,6 +28,9 @@ final class AppSettingsKeyboardTests: XCTestCase {
         settings.modKeySetting = .optionControl
         settings.hasSeenNiriOnboarding = true
         settings.cleanupOnClose = true
+        settings.terminalStartupCommandTemplate = "cd ${WORKDIR} && echo ${SESSION_ID}"
+        settings.niri.defaultNewColumnWidth = 920
+        settings.niri.defaultNewTileHeight = 540
         settings.customKeybindings[ShortcutActionID.niriToggleOverview.rawValue] = KeyChord(
             key: .o,
             modifiers: [.option, .control]
@@ -37,6 +43,9 @@ final class AppSettingsKeyboardTests: XCTestCase {
         XCTAssertEqual(decoded.modKeySetting, .optionControl)
         XCTAssertTrue(decoded.hasSeenNiriOnboarding)
         XCTAssertTrue(decoded.cleanupOnClose)
+        XCTAssertEqual(decoded.terminalStartupCommandTemplate, "cd ${WORKDIR} && echo ${SESSION_ID}")
+        XCTAssertEqual(decoded.niri.defaultNewColumnWidth, 920)
+        XCTAssertEqual(decoded.niri.defaultNewTileHeight, 540)
         XCTAssertEqual(
             decoded.customKeybindings[ShortcutActionID.niriToggleOverview.rawValue],
             KeyChord(key: .o, modifiers: [.option, .control])
