@@ -47,67 +47,65 @@ extension SessionContainerView {
         }
     }
 
+    // MARK: - Expanding + Button / Spotlight
+
     @ViewBuilder
     func niriCanvasQuickAddButton(sessionID: UUID) -> some View {
-        Button {
-            niriQuickAddMenuPresented = true
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(niriQuickAddMenuPresented ? tc.accent : tc.primaryText)
-                .frame(width: 30, height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(niriQuickAddMenuPresented ? tc.accent.opacity(0.15) : tc.surface1.opacity(0.95))
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(
-                            niriQuickAddMenuPresented ? tc.accent.opacity(0.4) : tc.divider.opacity(0.9),
-                            lineWidth: 1
-                        )
-                }
-        }
-        .buttonStyle(.plain)
-        .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 2)
-        .help("Add Tile (\(niriAddTileShortcutLabel))")
-        .animation(.easeOut(duration: 0.12), value: niriQuickAddMenuPresented)
-    }
-
-    /// Spotlight overlay placed at the canvas surface level for proper full-area coverage.
-    @ViewBuilder
-    func niriTileSpotlightOverlay(sessionID: UUID) -> some View {
         if niriQuickAddMenuPresented {
-            ZStack(alignment: .topLeading) {
-                // Dim backdrop
-                Color.black.opacity(0.3)
-                    .contentShape(Rectangle())
-                    .onTapGesture { niriQuickAddMenuPresented = false }
-
-                // Spotlight positioned near the + button
-                NiriTileSpotlight(
-                    isPresented: $niriQuickAddMenuPresented,
-                    items: niriSpotlightItems(sessionID: sessionID)
-                )
-                .padding(.top, 74) // below toolbar (28) + button area (38) + gap (8)
-                .padding(.leading, 10)
+            // Expanded spotlight
+            NiriTileSpotlight(
+                isPresented: $niriQuickAddMenuPresented,
+                items: niriAllSpotlightItems(sessionID: sessionID)
+            )
+            .transition(.asymmetric(
+                insertion: .scale(scale: 0.9, anchor: .topLeading)
+                    .combined(with: .opacity),
+                removal: .scale(scale: 0.95, anchor: .topLeading)
+                    .combined(with: .opacity)
+            ))
+        } else {
+            // Collapsed + button
+            Button {
+                withAnimation(.spring(duration: 0.25, bounce: 0.1)) {
+                    niriQuickAddMenuPresented = true
+                }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(tc.primaryText)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(tc.surface1.opacity(0.95))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(tc.divider.opacity(0.9), lineWidth: 1)
+                    }
             }
-            .transition(.opacity)
+            .buttonStyle(.plain)
+            .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 2)
+            .help("Add Tile (\(niriAddTileShortcutLabel))")
+            .transition(.scale(scale: 0.8, anchor: .topLeading).combined(with: .opacity))
         }
     }
 
-    // MARK: - Spotlight Items
+    // MARK: - All Spotlight Items (Tiles + Commands)
 
-    func niriSpotlightItems(sessionID: UUID) -> [TileSpotlightItem] {
+    func niriAllSpotlightItems(sessionID: UUID) -> [TileSpotlightItem] {
         var items: [TileSpotlightItem] = []
 
-        // Terminal tile (always first)
+        // -- Tile section --
+
+        // Terminal
         items.append(TileSpotlightItem(
             id: "terminal",
             icon: "terminal",
             title: "Terminal",
             subtitle: "New terminal tile",
-            searchText: "terminal shell console bash zsh",
+            searchText: "terminal shell console bash zsh new tile add",
+            shortcut: shortcutLabel(.niriAddTerminalRight),
+            section: .tiles,
             run: {
                 _ = self.sessionService.niriAddTerminalRight(in: sessionID)
             }
@@ -122,20 +120,22 @@ extension SessionContainerView {
                 iconImageName: app.iconImageName,
                 title: app.displayName,
                 subtitle: app.menuSubtitle,
-                searchText: "\(app.displayName.lowercased()) \(app.id) \(app.menuSubtitle.lowercased()) app tile",
+                searchText: "\(app.displayName.lowercased()) \(app.id) \(app.menuSubtitle.lowercased()) app tile add",
+                section: .tiles,
                 run: {
                     _ = self.sessionService.niriAddAppRight(in: sessionID, appID: app.id)
                 }
             ))
         }
 
-        // Browser tile
+        // Browser
         items.append(TileSpotlightItem(
             id: "browser",
             icon: "globe",
             title: "Browser",
             subtitle: "Open web view tile",
-            searchText: "browser web view globe url http",
+            searchText: "browser web view globe url http tile add",
+            section: .tiles,
             run: {
                 _ = self.sessionService.niriAddBrowserRight(in: sessionID)
             }
@@ -149,21 +149,135 @@ extension SessionContainerView {
                 icon: niriToolIconName(for: tool.id),
                 title: tool.displayName,
                 subtitle: tool.executableName,
-                searchText: "\(tool.displayName.lowercased()) \(tool.executableName.lowercased()) cli agent agentic tool",
+                searchText: "\(tool.displayName.lowercased()) \(tool.executableName.lowercased()) cli agent agentic tool tile add",
+                section: .tiles,
                 run: {
                     self.niriLaunchToolInNewTile(sessionID: sessionID, toolID: tool.id)
                 }
             ))
         }
 
+        // -- Commands section --
+
+        items.append(TileSpotlightItem(
+            id: "cmd-new-session",
+            icon: "plus.circle",
+            title: "New Quick Session",
+            subtitle: "Create an instant terminal session",
+            searchText: "new quick session instant terminal",
+            shortcut: shortcutLabel(.newQuickSession),
+            section: .commands,
+            run: { _ = self.coordinator.performCommand(.newQuickSession) }
+        ))
+
+        items.append(TileSpotlightItem(
+            id: "cmd-switch-session",
+            icon: "arrow.left.arrow.right",
+            title: "Quick Switch Session",
+            subtitle: "Jump to a session by name",
+            searchText: "switch session jump focus quick",
+            shortcut: shortcutLabel(.quickSwitchSession),
+            section: .commands,
+            run: { _ = self.coordinator.performCommand(.quickSwitchSession) }
+        ))
+
+        items.append(TileSpotlightItem(
+            id: "cmd-overview",
+            icon: "square.grid.3x3",
+            title: "Toggle Overview",
+            subtitle: "Bird's-eye view of all tiles",
+            searchText: "overview toggle canvas workspaces bird eye",
+            shortcut: shortcutLabel(.niriToggleOverview),
+            section: .commands,
+            run: { _ = self.coordinator.performCommand(.niriToggleOverview) }
+        ))
+
+        items.append(TileSpotlightItem(
+            id: "cmd-close-tile",
+            icon: "xmark.rectangle",
+            title: "Close Tile",
+            subtitle: "Close the focused tile",
+            searchText: "close tile pane remove",
+            shortcut: shortcutLabel(.closePane),
+            section: .commands,
+            run: { _ = self.coordinator.performCommand(.closePane) }
+        ))
+
+        items.append(TileSpotlightItem(
+            id: "cmd-toggle-sidebar",
+            icon: "sidebar.left",
+            title: "Toggle Sidebar",
+            subtitle: "Show or hide the sidebar",
+            searchText: "toggle sidebar show hide",
+            shortcut: shortcutLabel(.toggleSidebar),
+            section: .commands,
+            run: { _ = self.coordinator.performCommand(.toggleSidebar) }
+        ))
+
+        items.append(TileSpotlightItem(
+            id: "cmd-settings",
+            icon: "gear",
+            title: "Open Settings",
+            subtitle: "Open IDX0 preferences",
+            searchText: "settings preferences open",
+            shortcut: shortcutLabel(.openSettings),
+            section: .commands,
+            run: { _ = self.coordinator.performCommand(.openSettings) }
+        ))
+
+        items.append(TileSpotlightItem(
+            id: "cmd-shortcuts",
+            icon: "keyboard",
+            title: "Keyboard Shortcuts",
+            subtitle: "View all keyboard shortcuts",
+            searchText: "keyboard shortcuts help keys bindings",
+            shortcut: shortcutLabel(.keyboardShortcuts),
+            section: .commands,
+            run: { _ = self.coordinator.performCommand(.keyboardShortcuts) }
+        ))
+
+        items.append(TileSpotlightItem(
+            id: "cmd-rename",
+            icon: "pencil",
+            title: "Rename Session",
+            subtitle: "Change the title of the current session",
+            searchText: "rename session title",
+            shortcut: shortcutLabel(.renameSession),
+            section: .commands,
+            run: { _ = self.coordinator.performCommand(.renameSession) }
+        ))
+
+        items.append(TileSpotlightItem(
+            id: "cmd-snap",
+            icon: "dot.scope",
+            title: "Toggle Snap",
+            subtitle: sessionService.settings.niri.snapEnabled ? "Disable snap" : "Enable velocity-based snap",
+            searchText: "snap toggle velocity free pan",
+            shortcut: shortcutLabel(.niriToggleSnap),
+            section: .commands,
+            run: { _ = self.coordinator.performCommand(.niriToggleSnap) }
+        ))
+
+        items.append(TileSpotlightItem(
+            id: "cmd-tabbed",
+            icon: "rectangle.tophalf.inset.filled",
+            title: "Toggle Column Tabbed Display",
+            subtitle: "Switch column between normal and tabbed",
+            searchText: "tabbed column display mode toggle",
+            shortcut: shortcutLabel(.niriToggleColumnTabbedDisplay),
+            section: .commands,
+            run: { _ = self.coordinator.performCommand(.niriToggleColumnTabbedDisplay) }
+        ))
+
         return items
     }
 
+    private func shortcutLabel(_ action: ShortcutActionID) -> String? {
+        ShortcutRegistry.shared.displayLabel(for: action, settings: sessionService.settings)
+    }
+
     private var niriAddTileShortcutLabel: String {
-        ShortcutRegistry.shared.displayLabel(
-            for: .niriOpenAddTileMenu,
-            settings: sessionService.settings
-        ) ?? "+"
+        shortcutLabel(.niriOpenAddTileMenu) ?? "+"
     }
 
     func niriLaunchToolInNewTile(sessionID: UUID, toolID: String) {

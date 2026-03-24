@@ -9,15 +9,24 @@ extension SessionContainerView {
         let runtime = niriRuntimeBySession[session.id] ?? NiriCanvasRuntimeState()
 
         return niriCanvasSurfaceBody(session: session, layout: layout, runtime: runtime)
+        .overlay {
+            // Invisible dismiss layer when spotlight is open
+            if niriQuickAddMenuPresented {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.spring(duration: 0.2, bounce: 0.1)) {
+                            niriQuickAddMenuPresented = false
+                        }
+                    }
+            }
+        }
         .overlay(alignment: .topLeading) {
             niriCanvasQuickAddButton(sessionID: session.id)
                 .padding(.top, 38)
                 .padding(.leading, 10)
         }
-        .overlay {
-            niriTileSpotlightOverlay(sessionID: session.id)
-                .animation(.easeOut(duration: 0.15), value: niriQuickAddMenuPresented)
-        }
+        .animation(.spring(duration: 0.25, bounce: 0.1), value: niriQuickAddMenuPresented)
         .overlay(alignment: .topTrailing) {
             if let visualizer = niriActiveResizeVisualizer(
                 sessionID: session.id,

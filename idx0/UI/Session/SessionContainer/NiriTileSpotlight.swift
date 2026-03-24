@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Tile Spotlight Item
+// MARK: - Spotlight Item
 
 struct TileSpotlightItem: Identifiable {
     let id: String
@@ -9,10 +9,26 @@ struct TileSpotlightItem: Identifiable {
     let title: String
     let subtitle: String
     let searchText: String
+    var shortcut: String? = nil
+    var section: SpotlightSection = .tiles
     let run: () -> Void
+
+    enum SpotlightSection: Int, Comparable {
+        case tiles = 0
+        case commands = 1
+
+        static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
+
+        var header: String {
+            switch self {
+            case .tiles: return "ADD TILE"
+            case .commands: return "COMMANDS"
+            }
+        }
+    }
 }
 
-// MARK: - Tile Spotlight Overlay
+// MARK: - Expanding Spotlight
 
 struct NiriTileSpotlight: View {
     @Environment(\.themeColors) private var tc
@@ -25,23 +41,64 @@ struct NiriTileSpotlight: View {
     @State private var selectedIndex = 0
     @State private var hoveredIndex: Int?
 
+    private var filtered: [TileSpotlightItem] {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return items }
+        return items.filter { item in
+            FuzzyMatch.matches(query: normalized, text: item.searchText)
+        }.sorted { lhs, rhs in
+            let scoreDiff = FuzzyMatch.score(query: normalized, text: lhs.searchText) - FuzzyMatch.score(query: normalized, text: rhs.searchText)
+            if scoreDiff != 0 { return scoreDiff > 0 }
+            return lhs.section < rhs.section
+        }
+    }
+
+    /// Group filtered items by section, preserving order.
+    private var groupedSections: [(section: TileSpotlightItem.SpotlightSection, items: [TileSpotlightItem])] {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        // When searching, don't group — show flat ranked results
+        guard normalized.isEmpty else {
+            return [(.tiles, filtered)]
+        }
+        // Group by section
+        var dict: [TileSpotlightItem.SpotlightSection: [TileSpotlightItem]] = [:]
+        for item in filtered {
+            dict[item.section, default: []].append(item)
+        }
+        return dict.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Search field
+        VStack(alignment: .leading, spacing: 0) {
+            // Search field row
             HStack(spacing: 8) {
                 Image(systemName: "plus")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(tc.accent)
 
-                TextField("Add tile...", text: $query)
+                TextField("Search...", text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .focused($queryFocused)
                     .onSubmit { executeSelected() }
                     .onChange(of: query) { _, _ in selectedIndex = 0 }
+
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(tc.tertiaryText)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                keyBadge("esc")
+                    .onTapGesture { dismiss() }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, 9)
 
             Rectangle()
                 .fill(tc.divider)
@@ -51,73 +108,97 @@ struct NiriTileSpotlight: View {
             if !filtered.isEmpty {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 2) {
-                            ForEach(Array(filtered.enumerated()), id: \.element.id) { index, item in
-                                spotlightRow(item: item, isSelected: index == selectedIndex)
-                                    .id(item.id)
-                                    .onTapGesture {
-                                        selectedIndex = index
-                                        executeSelected()
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            let flat = filtered
+                            if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                // Grouped by section
+                                ForEach(groupedSections, id: \.section) { section, sectionItems in
+                                    sectionHeader(section.header)
+                                    ForEach(sectionItems) { item in
+                                        let globalIndex = flat.firstIndex(where: { $0.id == item.id }) ?? 0
+                                        spotlightRow(item: item, isSelected: globalIndex == selectedIndex)
+                                            .id(item.id)
+                                            .onTapGesture {
+                                                selectedIndex = globalIndex
+                                                executeSelected()
+                                            }
+                                            .onHover { hovering in
+                                                if hovering {
+                                                    selectedIndex = globalIndex
+                                                }
+                                            }
                                     }
-                                    .onHover { hovering in
-                                        if hovering {
-                                            hoveredIndex = index
+                                }
+                            } else {
+                                // Flat ranked results
+                                ForEach(Array(flat.enumerated()), id: \.element.id) { index, item in
+                                    spotlightRow(item: item, isSelected: index == selectedIndex)
+                                        .id(item.id)
+                                        .onTapGesture {
                                             selectedIndex = index
-                                        } else if hoveredIndex == index {
-                                            hoveredIndex = nil
+                                            executeSelected()
                                         }
-                                    }
+                                        .onHover { hovering in
+                                            if hovering {
+                                                selectedIndex = index
+                                            }
+                                        }
+                                }
                             }
                         }
                         .padding(6)
                     }
-                    .frame(maxHeight: 320)
+                    .frame(maxHeight: 340)
+                    .scrollIndicators(.hidden)
                     .onChange(of: selectedIndex) { _, newValue in
                         if let item = filtered.dropFirst(newValue).first {
-                            withAnimation(.easeOut(duration: 0.1)) {
+                            withAnimation(.easeOut(duration: 0.08)) {
                                 proxy.scrollTo(item.id, anchor: .center)
                             }
                         }
                     }
                 }
             } else {
-                Text("No matching tiles")
-                    .font(.system(size: 11))
-                    .foregroundStyle(tc.tertiaryText)
-                    .padding(12)
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 10))
+                        .foregroundStyle(tc.tertiaryText)
+                    Text("No results for \"\(query)\"")
+                        .font(.system(size: 11))
+                        .foregroundStyle(tc.tertiaryText)
+                }
+                .padding(12)
             }
-
-            Rectangle()
-                .fill(tc.divider)
-                .frame(height: 1)
-
-            // Footer hints
-            HStack(spacing: 14) {
-                keyHint("↑↓", "navigate")
-                keyHint("↵", "add")
-                keyHint("esc", "close")
-                Spacer()
-            }
-            .foregroundStyle(tc.tertiaryText)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(tc.windowBackground)
         }
-        .frame(width: 320)
-        .background(tc.sidebarBackground, in: RoundedRectangle(cornerRadius: 12))
+        .frame(width: 340)
+        .background(tc.sidebarBackground, in: RoundedRectangle(cornerRadius: 10))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(tc.surface2.opacity(0.5), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(tc.surface2.opacity(0.4), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.45), radius: 24, y: 8)
+        .shadow(color: .black.opacity(0.35), radius: 20, y: 6)
         .onAppear {
             query = ""
             selectedIndex = 0
-            queryFocused = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                queryFocused = true
+            }
         }
         .onKeyPress(.escape) { dismiss(); return .handled }
         .onKeyPress(.downArrow) { moveSelection(1); return .handled }
         .onKeyPress(.upArrow) { moveSelection(-1); return .handled }
+    }
+
+    // MARK: - Section Header
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .tracking(0.8)
+            .foregroundStyle(tc.tertiaryText)
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
     }
 
     // MARK: - Row
@@ -133,17 +214,17 @@ struct NiriTileSpotlight: View {
                         .frame(width: 14, height: 14)
                 } else {
                     Image(systemName: item.icon)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                 }
             }
             .foregroundStyle(isSelected ? tc.accent : tc.secondaryText)
-            .frame(width: 26, height: 26)
+            .frame(width: 24, height: 24)
             .background(
-                isSelected ? tc.accent.opacity(0.12) : tc.surface1,
+                isSelected ? tc.accent.opacity(0.1) : tc.surface1,
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(highlightedTitle(item.title))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(tc.primaryText)
@@ -155,6 +236,10 @@ struct NiriTileSpotlight: View {
             }
 
             Spacer(minLength: 0)
+
+            if let shortcut = item.shortcut {
+                keyBadge(shortcut)
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
@@ -165,31 +250,18 @@ struct NiriTileSpotlight: View {
         .contentShape(RoundedRectangle(cornerRadius: 6))
     }
 
-    // MARK: - Footer Key Hint
+    // MARK: - Key Badge
 
-    private func keyHint(_ key: String, _ label: String) -> some View {
-        HStack(spacing: 3) {
-            Text(key)
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(tc.surface1, in: RoundedRectangle(cornerRadius: 3))
-            Text(label)
-                .font(.system(size: 9))
-        }
+    private func keyBadge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .foregroundStyle(tc.tertiaryText)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(tc.surface1, in: RoundedRectangle(cornerRadius: 3))
     }
 
     // MARK: - Logic
-
-    private var filtered: [TileSpotlightItem] {
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return items }
-        return items.filter { item in
-            FuzzyMatch.matches(query: normalized, text: item.searchText)
-        }.sorted { lhs, rhs in
-            FuzzyMatch.score(query: normalized, text: lhs.searchText) > FuzzyMatch.score(query: normalized, text: rhs.searchText)
-        }
-    }
 
     private func highlightedTitle(_ title: String) -> AttributedString {
         FuzzyMatch.highlight(query: query, in: title)
