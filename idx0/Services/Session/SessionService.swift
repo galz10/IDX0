@@ -299,6 +299,7 @@ final class SessionService: ObservableObject {
                 id: NiriAppID.openCode,
                 displayName: "OpenCode",
                 icon: "chevron.left.forwardslash.chevron.right",
+                iconImageName: "icon-opencode",
                 menuSubtitle: "Run embedded OpenCode desktop",
                 isVisibleInMenus: true,
                 supportsWebZoomPersistence: true,
