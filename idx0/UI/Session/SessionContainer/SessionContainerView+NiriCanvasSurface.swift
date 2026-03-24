@@ -255,16 +255,21 @@ extension SessionContainerView {
     ) -> some View {
         let fullWidth = max(320, proxySize.width - 12)
         let fullHeight = max(120, proxySize.height - 12)
-        let core = niriCanvasItemCore(
-            session: session,
-            layout: layout,
-            workspaceIndex: workspaceIndex,
-            columnIndex: columnIndex,
-            item: item,
-            isFocused: true,
-            itemWidth: fullWidth,
-            itemHeight: fullHeight
-        )
+        let core = VStack(spacing: 0) {
+            niriCanvasItemHeader(
+                sessionID: session.id,
+                workspaceIndex: workspaceIndex,
+                columnIndex: columnIndex,
+                item: item,
+                isFocused: true
+            )
+            niriCanvasItemBodyContent(session: session, layout: layout, item: item)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: fullWidth, height: fullHeight)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .background(tc.surface0, in: RoundedRectangle(cornerRadius: 10))
+
         let styled = niriCanvasItemStyled(
             core,
             layout: layout,
