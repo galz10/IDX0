@@ -91,6 +91,7 @@ Current built-ins:
 - `t3-code` tile runtime (`idx0/Apps/T3Code/T3CodeRuntime.swift`)
 - `vscode` tile runtime (`idx0/Apps/VSCode/VSCodeRuntime.swift`)
 - `excalidraw` tile runtime (`idx0/Apps/Excalidraw/ExcalidrawRuntime.swift`)
+- `opencode` tile runtime (`idx0/Apps/OpenCode/OpenCodeRuntime.swift`)
 
 Descriptor fields define:
 
@@ -142,7 +143,19 @@ Key capabilities:
 - Local static serving into `WKWebView` with retryable startup behavior
 - Runtime state surfaced to tile UI (`preparingSource`, `building`, `live`, etc.)
 
-## 9. Integration Risk Checklist
+## 9. OpenCode Runtime Details
+
+Primary file: `idx0/Apps/OpenCode/OpenCodeRuntime.swift`
+
+Key capabilities:
+
+- Launches OpenCode in serve mode without auto-opening a browser.
+- Uses per-session isolated `XDG_*` directories under app support.
+- Probes readiness via `GET /global/health` before loading tile `WKWebView`.
+- Captures runtime stdout/stderr into per-session runtime logs.
+- Supports retry/stop/log-open and in-tile web zoom adjustments.
+
+## 10. Integration Risk Checklist
 
 Before merging integration changes:
 

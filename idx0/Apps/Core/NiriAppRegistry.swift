@@ -5,6 +5,7 @@ enum NiriAppID {
     static let t3Code = "t3-code"
     static let vscode = "vscode"
     static let excalidraw = "excalidraw"
+    static let openCode = "opencode"
 }
 
 @MainActor

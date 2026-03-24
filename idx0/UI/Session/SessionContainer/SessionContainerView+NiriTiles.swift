@@ -146,6 +146,116 @@ struct NiriVSCodeTile: View {
     }
 }
 
+struct NiriOpenCodeTile: View {
+    @EnvironmentObject private var sessionService: SessionService
+    @Environment(\.themeColors) private var tc
+
+    let sessionID: UUID
+    let itemID: UUID
+    @ObservedObject var controller: OpenCodeTileController
+
+    var body: some View {
+        Group {
+            switch controller.state {
+            case .live:
+                SessionBrowserWebView(webView: controller.webView)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .starting:
+                niriOpenCodeStatusView(
+                    icon: "bolt.horizontal",
+                    title: "Starting OpenCode",
+                    subtitle: "Launching OpenCode desktop runtime..."
+                )
+            case .idle:
+                niriOpenCodeStatusView(
+                    icon: "hourglass",
+                    title: "Ready To Start",
+                    subtitle: "Starting runtime..."
+                )
+            case .failed(let message, let logPath):
+                niriOpenCodeFailureView(message: message, logPath: logPath)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(tc.surface0)
+        .onTapGesture {
+            sessionService.markNiriAppFocused(for: sessionID, appID: NiriAppID.openCode)
+        }
+        .onAppear {
+            controller.ensureStarted()
+        }
+    }
+
+    @ViewBuilder
+    private func niriOpenCodeStatusView(icon: String, title: String, subtitle: String) -> some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.small)
+
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(tc.secondaryText)
+
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(tc.primaryText)
+
+            Text(subtitle)
+                .multilineTextAlignment(.center)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(tc.tertiaryText)
+                .frame(maxWidth: 320)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func niriOpenCodeFailureView(message: String, logPath: String?) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(Color.orange)
+
+            Text("OpenCode Failed To Start")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(tc.primaryText)
+
+            Text(message)
+                .multilineTextAlignment(.center)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(tc.secondaryText)
+                .frame(maxWidth: 360)
+
+            if let logPath {
+                Text(logPath)
+                    .font(.system(size: 9, weight: .regular, design: .monospaced))
+                    .foregroundStyle(tc.tertiaryText)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
+            }
+
+            HStack(spacing: 8) {
+                Button("Retry") {
+                    sessionService.retryNiriAppTile(sessionID: sessionID, itemID: itemID, appID: NiriAppID.openCode)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Button("Open Logs") {
+                    controller.openLogsInFinder()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(.top, 2)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 struct NiriT3Tile: View {
     @EnvironmentObject private var sessionService: SessionService
     @Environment(\.themeColors) private var tc

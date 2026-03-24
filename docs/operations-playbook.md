@@ -143,6 +143,7 @@ ls -la ~/Library/Application\ Support/idx0/run
 - VSCode runtime data: `~/Library/Application Support/idx0/openvscode/`
 - T3 runtime data: `~/Library/Application Support/idx0/t3code/`
 - Excalidraw runtime data: `~/Library/Application Support/idx0/excalidraw/`
+- OpenCode runtime data: `~/Library/Application Support/idx0/opencode/`
 
 ## 6. Escalation Notes
 
