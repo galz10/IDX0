@@ -768,4 +768,34 @@ final class VibeCLIDiscoveryServiceTests: XCTestCase {
         XCTAssertEqual(tool?.resolvedPath, geminiPath)
     }
 
+    func testCodexToolDetectsNvmVersionBinWhenPathMissingCodex() throws {
+        let temporaryHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("idx0-home-\(UUID().uuidString)", isDirectory: true)
+        let nvmBinDirectory = temporaryHome
+            .appendingPathComponent(".nvm/versions/node/v22.22.0/bin", isDirectory: true)
+        try FileManager.default.createDirectory(at: nvmBinDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryHome) }
+
+        let codexPath = nvmBinDirectory.appendingPathComponent("codex", isDirectory: false).path
+        try "#!/bin/sh\nexit 0\n".write(toFile: codexPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codexPath)
+
+        let service = VibeCLIDiscoveryService(
+            environment: [
+                "PATH": "/usr/bin:/bin",
+                "HOME": temporaryHome.path,
+                "ZDOTDIR": temporaryHome.path
+            ],
+            shellLookup: { _ in nil },
+            homeDirectory: temporaryHome.path
+        )
+
+        let tool = service.tool(withID: "codex")
+        XCTAssertEqual(tool?.isInstalled, true)
+        XCTAssertEqual(
+            tool?.resolvedPath.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path },
+            URL(fileURLWithPath: codexPath).resolvingSymlinksInPath().path
+        )
+    }
+
 }
