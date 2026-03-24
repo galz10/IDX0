@@ -211,7 +211,7 @@
 		126519A706915EF6A552C36D /* IPCContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPCContract.swift; sourceTree = "<group>"; };
 		12978EF6AC1D54BA282486F1 /* InlineAdvancedSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineAdvancedSettings.swift; sourceTree = "<group>"; };
 		14A94CD6356D5E7A13A9C7F9 /* ChromeCookieImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeCookieImporter.swift; sourceTree = "<group>"; };
-		150785B3AEE2598ED5427E3D /* idx0.icns.backup-20260322-075809 */ = {isa = PBXFileReference; path = "idx0.icns.backup-20260322-075809"; sourceTree = "<group>"; };
+		150785B3AEE2598ED5427E3D /* idx0.icns.backup-20260322-075809 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "idx0.icns.backup-20260322-075809"; sourceTree = "<group>"; };
 		164D3E27DB793DF6250CB60F /* AppCommandRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommandRegistryTests.swift; sourceTree = "<group>"; };
 		18F76B8A80EF8F1C875F70AF /* URLRoutingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLRoutingService.swift; sourceTree = "<group>"; };
 		1B5460029DE37A1C42C476E9 /* InlineSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineSettingsView.swift; sourceTree = "<group>"; };
@@ -1187,7 +1187,7 @@
 		0A80E460BD4ADD08E0262271 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "idx0-icon";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1196,9 +1196,7 @@
 					"\".\"",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = (
-					"$(SRCROOT)",
-				);
+				HEADER_SEARCH_PATHS = "$(SRCROOT)";
 				INFOPLIST_KEY_CFBundleDisplayName = IDX0;
 				INFOPLIST_KEY_CFBundleIconFile = idx0.icns;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -1233,7 +1231,7 @@
 		113FCC8CAF125E40DFB30950 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "idx0-icon";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1242,9 +1240,7 @@
 					"\".\"",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = (
-					"$(SRCROOT)",
-				);
+				HEADER_SEARCH_PATHS = "$(SRCROOT)";
 				INFOPLIST_KEY_CFBundleDisplayName = IDX0;
 				INFOPLIST_KEY_CFBundleIconFile = idx0.icns;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
