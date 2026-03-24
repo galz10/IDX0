@@ -2,6 +2,11 @@ import SwiftUI
 
 // MARK: - Shared styling (VS Code-inspired)
 
+enum HitTargetSize {
+    static let compact: CGFloat = 28
+    static let dense: CGFloat = 30
+}
+
 struct SettingSectionHeader: View {
     let title: String
     @Environment(\.themeColors) private var tc
@@ -182,5 +187,36 @@ struct ThemedPicker<Value: Hashable>: View {
             .frame(minWidth: 180)
             .background(tc.windowBackground)
         }
+    }
+}
+
+private struct HitTargetModifier: ViewModifier {
+    let size: CGFloat
+    let alignment: Alignment
+
+    func body(content: Content) -> some View {
+        content
+            .frame(minWidth: size, minHeight: size, alignment: alignment)
+            .contentShape(Rectangle())
+    }
+}
+
+private struct FullWidthHitRowModifier: ViewModifier {
+    let alignment: Alignment
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: alignment)
+            .contentShape(Rectangle())
+    }
+}
+
+extension View {
+    func idxHitTarget(size: CGFloat = HitTargetSize.compact, alignment: Alignment = .center) -> some View {
+        modifier(HitTargetModifier(size: size, alignment: alignment))
+    }
+
+    func idxFullWidthHitRow(alignment: Alignment = .leading) -> some View {
+        modifier(FullWidthHitRowModifier(alignment: alignment))
     }
 }
