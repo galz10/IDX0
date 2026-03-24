@@ -54,13 +54,33 @@ final class OpenCodeRuntimeTests: XCTestCase {
         XCTAssertEqual(OpenCodeTileRuntimeState.live(urlString: "http://127.0.0.1:9999").displayMessage, "Live")
     }
 
+    func testOpenCodeControllerUsesReadableDefaultZoom() {
+        let controller = OpenCodeTileController(
+            sessionID: UUID(),
+            itemID: UUID(),
+            launchDirectoryProvider: { FileManager.default.homeDirectoryForCurrentUser.path },
+            snapshotManager: OpenCodeStateSnapshotManager()
+        )
+
+        XCTAssertEqual(controller.webView.pageZoom, 0.5, accuracy: 0.0001)
+    }
+
     func testResolveExecutableReportsMissingToolDeterministically() async throws {
         let root = temporaryOpenCodeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
 
         let runner = StubOpenCodeProcessRunner { executable, arguments, _ in
-            XCTAssertEqual(executable, "/usr/bin/which")
-            XCTAssertEqual(arguments, ["opencode"])
+            switch executable {
+            case "/usr/bin/which":
+                XCTAssertEqual(arguments, ["opencode"])
+            case "/bin/zsh":
+                XCTAssertTrue(
+                    arguments == ["-lc", "whence -p opencode"] ||
+                        arguments == ["-ilc", "whence -p opencode"]
+                )
+            default:
+                XCTFail("Unexpected executable probe: \(executable)")
+            }
             return ProcessResult(exitCode: 1, stdout: "", stderr: "not found")
         }
 
@@ -70,7 +90,8 @@ final class OpenCodeRuntimeTests: XCTestCase {
             launchDirectoryProvider: { FileManager.default.homeDirectoryForCurrentUser.path },
             snapshotManager: OpenCodeStateSnapshotManager(),
             processRunner: runner,
-            rootDirectoryOverride: root
+            rootDirectoryOverride: root,
+            executableSearchDirectoriesOverride: []
         )
 
         do {
@@ -82,6 +103,38 @@ final class OpenCodeRuntimeTests: XCTestCase {
                 return
             }
         }
+    }
+
+    func testResolveExecutableFindsCommonInstallDirectoryWithoutPATHProbe() async throws {
+        let root = temporaryOpenCodeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let binDirectory = root.appendingPathComponent("bin", isDirectory: true)
+        try FileManager.default.createDirectory(at: binDirectory, withIntermediateDirectories: true)
+        let executablePath = binDirectory.appendingPathComponent("opencode", isDirectory: false)
+        _ = FileManager.default.createFile(
+            atPath: executablePath.path,
+            contents: Data("#!/bin/sh\necho opencode\n".utf8)
+        )
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executablePath.path)
+
+        let runner = StubOpenCodeProcessRunner { executable, _, _ in
+            XCTFail("Expected direct directory discovery before shell probes, got: \(executable)")
+            return ProcessResult(exitCode: 1, stdout: "", stderr: "")
+        }
+
+        let controller = OpenCodeTileController(
+            sessionID: UUID(),
+            itemID: UUID(),
+            launchDirectoryProvider: { FileManager.default.homeDirectoryForCurrentUser.path },
+            snapshotManager: OpenCodeStateSnapshotManager(),
+            processRunner: runner,
+            rootDirectoryOverride: root,
+            executableSearchDirectoriesOverride: [binDirectory.path]
+        )
+
+        let resolved = try await controller.resolveOpenCodeExecutable()
+        XCTAssertEqual(resolved, executablePath.path)
     }
 
     private func temporaryOpenCodeRoot() -> URL {

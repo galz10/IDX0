@@ -297,7 +297,7 @@ final class SessionService: ObservableObject {
             NiriAppDescriptor(
                 id: NiriAppID.openCode,
                 displayName: "OpenCode",
-                icon: "chevron.left.forwardslash.chevron.right.circle",
+                icon: "chevron.left.forwardslash.chevron.right",
                 menuSubtitle: "Run embedded OpenCode desktop",
                 isVisibleInMenus: true,
                 supportsWebZoomPersistence: true,

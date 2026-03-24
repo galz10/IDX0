@@ -113,6 +113,7 @@ enum OpenCodeTileRuntimeState: Equatable, Sendable {
 
 enum OpenCodeRuntimeError: LocalizedError, Sendable {
     case missingExecutable
+    case missingNodeExecutable
     case commandFailed(command: String, code: Int32, stderr: String?)
     case startupTimeout
     case processExitedBeforeReady
@@ -122,6 +123,8 @@ enum OpenCodeRuntimeError: LocalizedError, Sendable {
         switch self {
         case .missingExecutable:
             return "OpenCode CLI was not found on PATH. Install it and retry (for example: `brew install sst/tap/opencode`), then verify `which opencode`."
+        case .missingNodeExecutable:
+            return "Node.js was not found on PATH, but this OpenCode install requires it. Install Node (or make it visible to GUI apps) and retry."
         case .commandFailed(let command, let code, let stderr):
             if let stderr, !stderr.isEmpty {
                 return "Command failed (\(code)): \(command)\n\(stderr)"
@@ -149,9 +152,11 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
     private let snapshotManager: OpenCodeStateSnapshotManager
     private let processRunner: any ProcessRunnerProtocol
     private let paths: OpenCodeRuntimePaths
+    private let executableSearchDirectoriesOverride: [String]?
 
     private let readinessIntervalNanoseconds: UInt64 = 250_000_000
     private let readinessTimeoutSeconds: TimeInterval = 20
+    private let defaultZoom: CGFloat = 0.5
     private let minimumZoom: CGFloat = 0.5
     private let maximumZoom: CGFloat = 3.0
 
@@ -168,7 +173,8 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         launchDirectoryProvider: @escaping () -> String?,
         snapshotManager: OpenCodeStateSnapshotManager,
         processRunner: any ProcessRunnerProtocol = ProcessRunner(),
-        rootDirectoryOverride: URL? = nil
+        rootDirectoryOverride: URL? = nil,
+        executableSearchDirectoriesOverride: [String]? = nil
     ) {
         self.sessionID = sessionID
         self.itemID = itemID
@@ -176,11 +182,13 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         self.snapshotManager = snapshotManager
         self.processRunner = processRunner
         self.paths = OpenCodeRuntimePaths(sessionID: sessionID, rootDirectoryOverride: rootDirectoryOverride)
+        self.executableSearchDirectoriesOverride = executableSearchDirectoriesOverride
 
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
         webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.pageZoom = defaultZoom
     }
 
     func ensureStarted() {
@@ -234,35 +242,116 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
     }
 
     func resolveOpenCodeExecutable() async throws -> String {
-        do {
-            let result = try await processRunner.run(
-                executable: "/usr/bin/which",
-                arguments: ["opencode"],
-                currentDirectory: nil
-            )
+        if let directPath = resolveExecutableFromSearchDirectories(
+            named: "opencode",
+            searchDirectories: executableSearchDirectories()
+        ) {
+            return directPath
+        }
 
-            guard result.exitCode == 0 else {
-                throw OpenCodeRuntimeError.missingExecutable
+        let probes: [(executable: String, arguments: [String], command: String)] = [
+            ("/usr/bin/which", ["opencode"], "which opencode"),
+            ("/bin/zsh", ["-lc", "whence -p opencode"], "zsh -lc 'whence -p opencode'"),
+            ("/bin/zsh", ["-ilc", "whence -p opencode"], "zsh -ilc 'whence -p opencode'")
+        ]
+
+        var failedProbeCommands: [String] = []
+
+        for probe in probes {
+            do {
+                let result = try await processRunner.run(
+                    executable: probe.executable,
+                    arguments: probe.arguments,
+                    currentDirectory: nil
+                )
+
+                guard result.exitCode == 0 else { continue }
+                guard let resolvedPath = firstExecutablePath(from: result.stdout) else { continue }
+                guard FileManager.default.isExecutableFile(atPath: resolvedPath) else { continue }
+                return resolvedPath
+            } catch {
+                failedProbeCommands.append("\(probe.command): \(error.localizedDescription)")
             }
+        }
 
-            guard let path = result.stdout
-                .split(whereSeparator: \.isNewline)
-                .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
-                .first(where: { !$0.isEmpty })
-            else {
-                throw OpenCodeRuntimeError.missingExecutable
-            }
-
-            return path
-        } catch let error as OpenCodeRuntimeError {
-            throw error
-        } catch {
+        if failedProbeCommands.count == probes.count {
             throw OpenCodeRuntimeError.commandFailed(
-                command: "which opencode",
+                command: probes.map(\.command).joined(separator: " | "),
                 code: -1,
-                stderr: error.localizedDescription
+                stderr: failedProbeCommands.joined(separator: "\n")
             )
         }
+
+        throw OpenCodeRuntimeError.missingExecutable
+    }
+
+    private func resolveExecutableFromSearchDirectories(
+        named executable: String,
+        searchDirectories: [String]
+    ) -> String? {
+        for directory in searchDirectories where !directory.isEmpty {
+            let candidate = URL(fileURLWithPath: directory, isDirectory: true)
+                .appendingPathComponent(executable, isDirectory: false)
+                .path
+            if FileManager.default.isExecutableFile(atPath: candidate) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    private func executableSearchDirectories() -> [String] {
+        if let executableSearchDirectoriesOverride {
+            return executableSearchDirectoriesOverride
+        }
+
+        let environment = ProcessInfo.processInfo.environment
+        var directories = (environment["PATH"] ?? "")
+            .split(separator: ":")
+            .map(String.init)
+
+        directories.append(contentsOf: defaultExecutableSearchDirectories(homeDirectory: NSHomeDirectory()))
+        return uniqueDirectories(directories)
+    }
+
+    private func defaultExecutableSearchDirectories(homeDirectory: String) -> [String] {
+        [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+            "\(homeDirectory)/.asdf/shims",
+            "\(homeDirectory)/.volta/bin",
+            "\(homeDirectory)/.cargo/bin",
+            "\(homeDirectory)/.local/bin",
+            "\(homeDirectory)/bin",
+            "\(homeDirectory)/.bun/bin",
+            "\(homeDirectory)/Library/pnpm",
+            "\(homeDirectory)/.npm-global/bin",
+            "\(homeDirectory)/.yarn/bin",
+            "\(homeDirectory)/.config/yarn/global/node_modules/.bin",
+            "\(homeDirectory)/.nvm/versions/node/current/bin"
+        ]
+    }
+
+    private func uniqueDirectories(_ directories: [String]) -> [String] {
+        var seen: Set<String> = []
+        var unique: [String] = []
+
+        for directory in directories where !directory.isEmpty {
+            if seen.insert(directory).inserted {
+                unique.append(directory)
+            }
+        }
+
+        return unique
+    }
+
+    private func firstExecutablePath(from output: String) -> String? {
+        output
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty && $0.hasPrefix("/") })
     }
 
     private func runStartupSequence() async {
@@ -286,6 +375,10 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         }
 
         let executablePath = try await resolveOpenCodeExecutable()
+        let runtimeEnvironment = try await buildRuntimeEnvironment(
+            executablePath: executablePath,
+            environmentOverrides: sessionState.environmentOverrides
+        )
         let port = try reserveLoopbackPort()
         let launchDirectory = resolvedLaunchDirectory()
 
@@ -294,17 +387,18 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
             executablePath: executablePath,
             port: port,
             launchDirectory: launchDirectory,
-            environmentOverrides: sessionState.environmentOverrides
+            environment: runtimeEnvironment
         )
 
         let ready = await waitForServerReady(port: port)
         guard ready else {
+            let exitedBeforeReady = (process?.isRunning == false)
             terminateProcess()
 
             if userStopped || Task.isCancelled {
                 throw OpenCodeRuntimeError.cancelled
             }
-            if process?.isRunning == false {
+            if exitedBeforeReady {
                 throw OpenCodeRuntimeError.processExitedBeforeReady
             }
             throw OpenCodeRuntimeError.startupTimeout
@@ -373,7 +467,7 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         executablePath: String,
         port: Int,
         launchDirectory: String,
-        environmentOverrides: [String: String]
+        environment: [String: String]
     ) throws {
         terminateProcess()
 
@@ -397,10 +491,6 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
             "--port", String(port),
         ]
 
-        var environment = ProcessInfo.processInfo.environment
-        for (key, value) in environmentOverrides {
-            environment[key] = value
-        }
         process.environment = environment
 
         let stdout = Pipe()
@@ -437,6 +527,86 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         self.stderrPipe = stderr
 
         appendRuntimeLog("spawned opencode pid=\(process.processIdentifier) port=\(port)")
+    }
+
+    private func buildRuntimeEnvironment(
+        executablePath: String,
+        environmentOverrides: [String: String]
+    ) async throws -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        var pathDirectories = uniqueDirectories(
+            ((environment["PATH"] ?? "")
+                .split(separator: ":")
+                .map(String.init)) +
+                executableSearchDirectories() +
+                [URL(fileURLWithPath: executablePath, isDirectory: false).deletingLastPathComponent().path]
+        )
+
+        let requiresNode = executableRequiresNode(atPath: executablePath)
+        if let nodeExecutablePath = await resolveOptionalExecutablePath("node", searchDirectories: pathDirectories) {
+            let nodeDirectory = URL(fileURLWithPath: nodeExecutablePath, isDirectory: false)
+                .deletingLastPathComponent()
+                .path
+            pathDirectories = uniqueDirectories(pathDirectories + [nodeDirectory])
+            appendRuntimeLog("resolved node executable: \(nodeExecutablePath)")
+        } else if requiresNode {
+            throw OpenCodeRuntimeError.missingNodeExecutable
+        }
+
+        environment["PATH"] = pathDirectories.joined(separator: ":")
+
+        for (key, value) in environmentOverrides {
+            environment[key] = value
+        }
+
+        return environment
+    }
+
+    private func executableRequiresNode(atPath path: String) -> Bool {
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return false
+        }
+        guard let shebangLine = content.split(whereSeparator: \.isNewline).first else {
+            return false
+        }
+        let shebang = String(shebangLine).trimmingCharacters(in: .whitespacesAndNewlines)
+        return shebang.hasPrefix("#!") && shebang.contains("node")
+    }
+
+    private func resolveOptionalExecutablePath(
+        _ executable: String,
+        searchDirectories: [String]
+    ) async -> String? {
+        if let directPath = resolveExecutableFromSearchDirectories(
+            named: executable,
+            searchDirectories: searchDirectories
+        ) {
+            return directPath
+        }
+
+        let probes: [(executable: String, arguments: [String])] = [
+            ("/usr/bin/which", [executable]),
+            ("/bin/zsh", ["-lc", "whence -p \(executable)"]),
+            ("/bin/zsh", ["-ilc", "whence -p \(executable)"])
+        ]
+
+        for probe in probes {
+            do {
+                let result = try await processRunner.run(
+                    executable: probe.executable,
+                    arguments: probe.arguments,
+                    currentDirectory: nil
+                )
+                guard result.exitCode == 0 else { continue }
+                guard let resolvedPath = firstExecutablePath(from: result.stdout) else { continue }
+                guard FileManager.default.isExecutableFile(atPath: resolvedPath) else { continue }
+                return resolvedPath
+            } catch {
+                continue
+            }
+        }
+
+        return nil
     }
 
     private func waitForServerReady(port: Int) async -> Bool {
