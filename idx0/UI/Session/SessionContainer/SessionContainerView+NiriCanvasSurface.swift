@@ -106,16 +106,39 @@ extension SessionContainerView {
             isOverview: layout.isOverviewOpen
         )
         let activeWorkspaceIndex = niriActiveWorkspaceIndex(layout: layout) ?? 0
+        let zoomedItemID = sessionService.niriFocusedTileZoomItemID(for: session.id)
+
+        let viewportContent: AnyView = {
+            if let zoomedItemID,
+               let path = sessionService.findNiriItemPath(layout: layout, itemID: zoomedItemID) {
+                return AnyView(
+                    niriFocusedTileZoomViewport(
+                        session: session,
+                        layout: layout,
+                        workspace: layout.workspaces[path.workspaceIndex],
+                        workspaceIndex: path.workspaceIndex,
+                        column: layout.workspaces[path.workspaceIndex].columns[path.columnIndex],
+                        columnIndex: path.columnIndex,
+                        item: layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex],
+                        metrics: metrics,
+                        proxySize: proxy.size
+                    )
+                )
+            }
+            return AnyView(
+                niriCanvasViewportLayer(
+                    session: session,
+                    layout: layout,
+                    runtime: runtime,
+                    metrics: metrics,
+                    activeWorkspaceIndex: activeWorkspaceIndex,
+                    proxySize: proxy.size
+                )
+            )
+        }()
 
         return niriCanvasKeyHandling(
-            niriCanvasViewportLayer(
-                session: session,
-                layout: layout,
-                runtime: runtime,
-                metrics: metrics,
-                activeWorkspaceIndex: activeWorkspaceIndex,
-                proxySize: proxy.size
-            )
+            viewportContent
             .clipped()
             .onAppear {
                 if niriRuntimeBySession[session.id] != nil {
@@ -130,12 +153,14 @@ extension SessionContainerView {
                 niriRuntimeBySession[session.id]?.lastContainerSize = newSize
             },
             sessionID: session.id,
-            isOverviewOpen: layout.isOverviewOpen
+            isOverviewOpen: layout.isOverviewOpen,
+            isFocusedTileZoomed: zoomedItemID != nil
         )
         .animation(.spring(duration: 0.35, bounce: 0.08), value: layout.isOverviewOpen)
         .animation(.spring(duration: 0.25, bounce: 0), value: layout.camera.focusedItemID)
         .animation(.spring(duration: 0.25, bounce: 0), value: layout.camera.activeColumnID)
         .animation(.spring(duration: 0.25, bounce: 0), value: layout.camera.activeWorkspaceID)
+        .animation(.spring(duration: 0.25, bounce: 0), value: zoomedItemID)
         .overlay {
             if let osdText = niriWorkspaceSwitchOSD {
                 Text(osdText)
@@ -217,6 +242,52 @@ extension SessionContainerView {
         }
     }
 
+    func niriFocusedTileZoomViewport(
+        session: Session,
+        layout: NiriCanvasLayout,
+        workspace: NiriWorkspace,
+        workspaceIndex: Int,
+        column: NiriColumn,
+        columnIndex: Int,
+        item: NiriLayoutItem,
+        metrics: NiriCanvasMetrics,
+        proxySize: CGSize
+    ) -> some View {
+        let fullWidth = max(320, proxySize.width - 12)
+        let fullHeight = max(120, proxySize.height - 12)
+        let core = niriCanvasItemCore(
+            session: session,
+            layout: layout,
+            workspaceIndex: workspaceIndex,
+            columnIndex: columnIndex,
+            item: item,
+            isFocused: true,
+            itemWidth: fullWidth,
+            itemHeight: fullHeight
+        )
+        let styled = niriCanvasItemStyled(
+            core,
+            layout: layout,
+            isFocused: true,
+            itemID: item.id
+        )
+        let interactive = niriCanvasItemInteractions(
+            styled,
+            session: session,
+            layout: layout,
+            workspace: workspace,
+            column: column,
+            item: item,
+            metrics: metrics
+        )
+
+        return ZStack {
+            tc.windowBackground
+            interactive
+                .padding(6)
+        }
+    }
+
     func niriCanvasPanCapture(
         sessionID: UUID,
         layout: NiriCanvasLayout,
@@ -268,7 +339,8 @@ extension SessionContainerView {
     func niriCanvasKeyHandling<Content: View>(
         _ content: Content,
         sessionID: UUID,
-        isOverviewOpen: Bool
+        isOverviewOpen: Bool,
+        isFocusedTileZoomed: Bool
     ) -> some View {
         content
             .onKeyPress(.upArrow) {
@@ -297,6 +369,10 @@ extension SessionContainerView {
                 return .handled
             }
             .onKeyPress(.escape) {
+                if isFocusedTileZoomed {
+                    sessionService.clearNiriFocusedTileZoom(sessionID: sessionID)
+                    return .handled
+                }
                 guard isOverviewOpen else { return .ignored }
                 sessionService.toggleNiriOverview(sessionID: sessionID)
                 return .handled

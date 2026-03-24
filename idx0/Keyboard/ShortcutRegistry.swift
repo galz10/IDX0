@@ -410,7 +410,7 @@ struct ShortcutRegistry {
             niriActionName: nil,
             niriCompatibility: .adapted,
             remappable: true,
-            macBindings: [.mac(.w, [.command, .option])],
+            macBindings: [.mac(.w, [.command, .option, .shift])],
             niriBindings: []
         ),
         ShortcutDescriptor(
@@ -444,7 +444,7 @@ struct ShortcutRegistry {
             niriCompatibility: .adapted,
             remappable: true,
             macBindings: [.mac(.w, [.command, .shift])],
-            niriBindings: [.niri(.q, fixed: [.shift])]
+            niriBindings: [.niri(.w), .niri(.q, fixed: [.shift])]
         ),
         ShortcutDescriptor(
             id: .nextPane,
@@ -487,8 +487,11 @@ struct ShortcutRegistry {
             niriActionName: "Spawn window right",
             niriCompatibility: .exact,
             remappable: true,
-            macBindings: [.mac(.backslash, [.command, .option])],
-            niriBindings: [.niri(.backslash)]
+            macBindings: [
+                .mac(.t, [.command, .option]),
+                .mac(.backslash, [.command, .option]),
+            ],
+            niriBindings: [.niri(.t), .niri(.backslash)]
         ),
         ShortcutDescriptor(
             id: .niriAddTaskBelow,
@@ -597,8 +600,8 @@ struct ShortcutRegistry {
             niriActionName: "Toggle tabbed column",
             niriCompatibility: .exact,
             remappable: true,
-            macBindings: [.mac(.t, [.command, .option])],
-            niriBindings: [.niri(.t)]
+            macBindings: [.mac(.t, [.command, .option, .shift])],
+            niriBindings: [.niri(.t, fixed: [.shift])]
         ),
         ShortcutDescriptor(
             id: .niriToggleSnap,
@@ -654,6 +657,17 @@ struct ShortcutRegistry {
             remappable: true,
             macBindings: [],
             niriBindings: [.niri(.i, fixed: [.shift]), .niri(.pageDown, fixed: [.shift])]
+        ),
+        ShortcutDescriptor(
+            id: .niriToggleFocusedTileZoom,
+            title: "Toggle Focused Tile Zoom",
+            detail: "Toggle focused tile max-zoom mode",
+            section: .niri,
+            niriActionName: "Toggle focused tile max zoom",
+            niriCompatibility: .adapted,
+            remappable: true,
+            macBindings: [.mac(.f, [.command, .option])],
+            niriBindings: [.niri(.f)]
         ),
         ShortcutDescriptor(
             id: .niriZoomInFocusedWebTile,

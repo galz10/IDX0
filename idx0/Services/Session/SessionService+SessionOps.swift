@@ -54,6 +54,7 @@ extension SessionService {
         tabsBySession.removeValue(forKey: id)
         selectedTabIDBySession.removeValue(forKey: id)
         niriLayoutsBySession.removeValue(forKey: id)
+        niriFocusedTileZoomItemIDBySession.removeValue(forKey: id)
         paneTrees.removeValue(forKey: id)
         focusedPaneControllerID.removeValue(forKey: id)
 
