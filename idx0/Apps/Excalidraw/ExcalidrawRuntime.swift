@@ -236,9 +236,10 @@ final class ExcalidrawBuildCoordinator {
         )
         defer { try? fileManager.removeItem(at: paths.buildLockPath) }
 
-        try await ensureToolAvailable("git", paths: paths)
-        try await ensureToolAvailable("node", paths: paths)
-        try await ensureToolAvailable("yarn", paths: paths)
+        let resolvedGitPath = try await ensureToolAvailable("git", paths: paths)
+        let resolvedNodePath = try await ensureToolAvailable("node", paths: paths)
+        let resolvedYarnPath = try await ensureToolAvailable("yarn", paths: paths)
+        let preferredToolDirectories = uniqueParentDirectories(for: [resolvedGitPath, resolvedNodePath, resolvedYarnPath])
 
         if fileManager.fileExists(atPath: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true).path) {
             appendBuildLog(paths: paths, line: "Refreshing existing repository")
@@ -267,16 +268,24 @@ final class ExcalidrawBuildCoordinator {
 
         onStateUpdate?(.building)
 
+        let installCommand = nonInteractiveShellCommand(
+            manifest.installCommand,
+            preferredToolDirectories: preferredToolDirectories
+        )
         try await runChecked(
             executable: "/bin/zsh",
-            arguments: ["-ilc", manifest.installCommand],
+            arguments: ["-lc", installCommand],
             currentDirectory: paths.sourceDirectory.path,
             paths: paths
         )
 
+        let buildCommand = nonInteractiveShellCommand(
+            manifest.buildCommand,
+            preferredToolDirectories: preferredToolDirectories
+        )
         try await runChecked(
             executable: "/bin/zsh",
-            arguments: ["-ilc", manifest.buildCommand],
+            arguments: ["-lc", buildCommand],
             currentDirectory: paths.sourceDirectory.path,
             paths: paths
         )
@@ -304,7 +313,7 @@ final class ExcalidrawBuildCoordinator {
         return entrypointURL
     }
 
-    private func ensureToolAvailable(_ tool: String, paths: ExcalidrawRuntimePaths) async throws {
+    private func ensureToolAvailable(_ tool: String, paths: ExcalidrawRuntimePaths) async throws -> String {
         let probes: [(executable: String, arguments: [String], display: String)] = [
             ("/usr/bin/which", [tool], "which \(tool)"),
             ("/bin/zsh", ["-lc", "whence -p \(tool)"], "zsh -lc 'whence -p \(tool)'"),
@@ -329,7 +338,7 @@ final class ExcalidrawBuildCoordinator {
             if result.exitCode == 0,
                let resolvedPath = firstExecutablePath(from: result.stdout) {
                 appendBuildLog(paths: paths, line: "Resolved \(tool) -> \(resolvedPath)")
-                return
+                return resolvedPath
             }
         }
 
@@ -343,6 +352,42 @@ final class ExcalidrawBuildCoordinator {
             .filter { !$0.isEmpty }
 
         return candidates.first(where: { $0.hasPrefix("/") })
+    }
+
+    private func uniqueParentDirectories(for resolvedToolPaths: [String]) -> [String] {
+        var seen: Set<String> = []
+        var directories: [String] = []
+
+        for path in resolvedToolPaths {
+            let parentDirectory = URL(fileURLWithPath: path).deletingLastPathComponent().path
+            guard !parentDirectory.isEmpty, !seen.contains(parentDirectory) else { continue }
+            seen.insert(parentDirectory)
+            directories.append(parentDirectory)
+        }
+
+        return directories
+    }
+
+    private func nonInteractiveShellCommand(
+        _ command: String,
+        preferredToolDirectories: [String]
+    ) -> String {
+        var parts = [
+            "export CI=1",
+            "export COREPACK_ENABLE_DOWNLOAD_PROMPT=0"
+        ]
+
+        if !preferredToolDirectories.isEmpty {
+            let joinedDirectories = preferredToolDirectories.joined(separator: ":")
+            parts.append("export PATH='\(shellEscapeSingleQuoted(joinedDirectories))':\"$PATH\"")
+        }
+
+        parts.append(command)
+        return parts.joined(separator: "; ")
+    }
+
+    private func shellEscapeSingleQuoted(_ value: String) -> String {
+        value.replacingOccurrences(of: "'", with: "'\\''")
     }
 
     private func runChecked(

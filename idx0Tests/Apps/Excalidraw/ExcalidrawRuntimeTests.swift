@@ -135,6 +135,71 @@ final class ExcalidrawRuntimeTests: XCTestCase {
         XCTAssertEqual(invocationCount, 0)
     }
 
+    func testBuildCoordinatorUsesNonInteractiveShellForYarnCommands() async throws {
+        let root = temporaryExcalidrawRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let paths = ExcalidrawRuntimePaths(sessionID: UUID(), rootDirectoryOverride: root)
+        let manifest = ExcalidrawBuildManifest.default
+
+        actor InvocationRecorder {
+            var values: [(String, [String], String?)] = []
+
+            func append(_ value: (String, [String], String?)) {
+                values.append(value)
+            }
+
+            func all() -> [(String, [String], String?)] {
+                values
+            }
+        }
+
+        let recorder = InvocationRecorder()
+
+        let runner = StubExcalidrawProcessRunner { executable, arguments, currentDirectory in
+            await recorder.append((executable, arguments, currentDirectory))
+
+            if executable == "/usr/bin/which", let tool = arguments.first {
+                return ProcessResult(exitCode: 0, stdout: "/usr/bin/\(tool)", stderr: "")
+            }
+
+            if executable == "/usr/bin/git", arguments.first == "clone" {
+                try FileManager.default.createDirectory(at: paths.sourceDirectory, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    at: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true),
+                    withIntermediateDirectories: true
+                )
+            }
+
+            if executable == "/bin/zsh",
+               arguments.first == "-lc",
+               arguments.count == 2,
+               arguments[1].contains(manifest.buildCommand) {
+                let artifact = paths.sourceDirectory.appendingPathComponent(manifest.entrypoint, isDirectory: false)
+                try FileManager.default.createDirectory(at: artifact.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Data().write(to: artifact)
+            }
+
+            return ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        }
+
+        let coordinator = ExcalidrawBuildCoordinator(processRunner: runner, fileManager: .default)
+        _ = try await coordinator.ensureBuilt(manifest: manifest, paths: paths)
+
+        let invocations = await recorder.all()
+        let shellInvocations = invocations.filter { $0.0 == "/bin/zsh" }
+
+        XCTAssertEqual(shellInvocations.count, 2)
+        XCTAssertTrue(shellInvocations.allSatisfy { invocation in invocation.1.first == "-lc" })
+        XCTAssertTrue(shellInvocations.allSatisfy { invocation in
+            invocation.1.count == 2 &&
+                invocation.1[1].contains("COREPACK_ENABLE_DOWNLOAD_PROMPT=0") &&
+                invocation.1[1].contains("export CI=1")
+        })
+        XCTAssertTrue(shellInvocations.contains(where: { $0.1[1].contains(manifest.installCommand) }))
+        XCTAssertTrue(shellInvocations.contains(where: { $0.1[1].contains(manifest.buildCommand) }))
+    }
+
     func testSessionOriginStorePersistsPreferredPort() {
         let root = temporaryExcalidrawRoot()
         defer { try? FileManager.default.removeItem(at: root) }
