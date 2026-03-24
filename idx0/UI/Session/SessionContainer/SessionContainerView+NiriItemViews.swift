@@ -116,7 +116,7 @@ extension SessionContainerView {
                     .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(tc.tertiaryText)
                     .frame(width: 16, height: 16)
-                    .contentShape(Rectangle())
+                    .idxHitTarget()
             }
             .buttonStyle(.plain)
             .opacity(isFocused ? 1 : 0.5)

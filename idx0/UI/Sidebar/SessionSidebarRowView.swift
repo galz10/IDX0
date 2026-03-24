@@ -78,6 +78,7 @@ struct SessionSidebarRowView: View {
                         .foregroundStyle(tc.tertiaryText)
                         .frame(width: 16, height: 16)
                         .background(tc.surface2.opacity(0.6), in: RoundedRectangle(cornerRadius: 3))
+                        .idxHitTarget()
                 }
                 .buttonStyle(.plain)
                 .help("Close Session")
