@@ -244,7 +244,7 @@ final class ExcalidrawBuildCoordinator {
         if fileManager.fileExists(atPath: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true).path) {
             appendBuildLog(paths: paths, line: "Refreshing existing repository")
             try await runChecked(
-                executable: "/usr/bin/git",
+                executable: resolvedGitPath,
                 arguments: ["-C", paths.sourceDirectory.path, "fetch", "--all", "--tags"],
                 currentDirectory: paths.sourceDirectory.path,
                 paths: paths
@@ -252,7 +252,7 @@ final class ExcalidrawBuildCoordinator {
         } else {
             appendBuildLog(paths: paths, line: "Cloning repository")
             try await runChecked(
-                executable: "/usr/bin/git",
+                executable: resolvedGitPath,
                 arguments: ["clone", manifest.repositoryURL, paths.sourceDirectory.path],
                 currentDirectory: paths.rootDirectory.path,
                 paths: paths
@@ -260,7 +260,7 @@ final class ExcalidrawBuildCoordinator {
         }
 
         try await runChecked(
-            executable: "/usr/bin/git",
+            executable: resolvedGitPath,
             arguments: ["-C", paths.sourceDirectory.path, "checkout", manifest.pinnedCommit],
             currentDirectory: paths.sourceDirectory.path,
             paths: paths
@@ -489,6 +489,12 @@ final class ExcalidrawSessionOriginStore {
         saveRecord(record)
     }
 
+    func removePort(for sessionID: UUID) {
+        var record = loadRecord()
+        record.portsBySessionID.removeValue(forKey: sessionID.uuidString)
+        saveRecord(record)
+    }
+
     private func loadRecord() -> ExcalidrawSessionOriginRecord {
         guard fileManager.fileExists(atPath: recordURL.path),
               let data = try? Data(contentsOf: recordURL),
@@ -617,7 +623,14 @@ final class ExcalidrawTileController: ObservableObject, NiriAppTileRuntimeContro
     }
 
     func openLogsInFinder() {
-        let url = paths.runtimeLogPath
+        let url: URL
+        if case .failed(_, let logPath) = state,
+           let logPath,
+           !logPath.isEmpty {
+            url = URL(fileURLWithPath: logPath, isDirectory: false)
+        } else {
+            url = paths.runtimeLogPath
+        }
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }

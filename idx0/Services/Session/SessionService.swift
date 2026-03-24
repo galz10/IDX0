@@ -335,7 +335,10 @@ final class SessionService: ObservableObject {
                     )
                 },
                 cleanupSessionArtifacts: { _, sessionID in
-                    ExcalidrawRuntimePaths(sessionID: sessionID).removeSessionArtifacts()
+                    let paths = ExcalidrawRuntimePaths(sessionID: sessionID)
+                    paths.removeSessionArtifacts()
+                    let originStore = ExcalidrawSessionOriginStore(recordURL: paths.originsRecordPath)
+                    originStore.removePort(for: sessionID)
                 }
             ),
             NiriAppDescriptor(

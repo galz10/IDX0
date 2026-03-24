@@ -200,6 +200,71 @@ final class ExcalidrawRuntimeTests: XCTestCase {
         XCTAssertTrue(shellInvocations.contains(where: { $0.1[1].contains(manifest.buildCommand) }))
     }
 
+    func testBuildCoordinatorUsesResolvedGitPathForGitCommands() async throws {
+        let root = temporaryExcalidrawRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let paths = ExcalidrawRuntimePaths(sessionID: UUID(), rootDirectoryOverride: root)
+        let manifest = ExcalidrawBuildManifest.default
+        let resolvedGitPath = "/opt/homebrew/bin/git"
+
+        actor InvocationRecorder {
+            var values: [(String, [String], String?)] = []
+
+            func append(_ value: (String, [String], String?)) {
+                values.append(value)
+            }
+
+            func all() -> [(String, [String], String?)] {
+                values
+            }
+        }
+
+        let recorder = InvocationRecorder()
+
+        let runner = StubExcalidrawProcessRunner { executable, arguments, currentDirectory in
+            await recorder.append((executable, arguments, currentDirectory))
+
+            if executable == "/usr/bin/which", let tool = arguments.first {
+                switch tool {
+                case "git":
+                    return ProcessResult(exitCode: 0, stdout: "\(resolvedGitPath)\n", stderr: "")
+                case "node", "yarn":
+                    return ProcessResult(exitCode: 0, stdout: "/usr/bin/\(tool)\n", stderr: "")
+                default:
+                    break
+                }
+            }
+
+            if executable == resolvedGitPath, arguments.first == "clone" {
+                try FileManager.default.createDirectory(at: paths.sourceDirectory, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    at: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true),
+                    withIntermediateDirectories: true
+                )
+            }
+
+            if executable == "/bin/zsh",
+               arguments.first == "-lc",
+               arguments.count == 2,
+               arguments[1].contains(manifest.buildCommand) {
+                let artifact = paths.sourceDirectory.appendingPathComponent(manifest.entrypoint, isDirectory: false)
+                try FileManager.default.createDirectory(at: artifact.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Data().write(to: artifact)
+            }
+
+            return ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        }
+
+        let coordinator = ExcalidrawBuildCoordinator(processRunner: runner, fileManager: .default)
+        _ = try await coordinator.ensureBuilt(manifest: manifest, paths: paths)
+
+        let invocations = await recorder.all()
+        XCTAssertTrue(invocations.contains(where: { $0.0 == resolvedGitPath && $0.1.first == "clone" }))
+        XCTAssertTrue(invocations.contains(where: { $0.0 == resolvedGitPath && $0.1.contains("checkout") }))
+        XCTAssertFalse(invocations.contains(where: { $0.0 == "/usr/bin/git" }))
+    }
+
     func testSessionOriginStorePersistsPreferredPort() {
         let root = temporaryExcalidrawRoot()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -215,6 +280,30 @@ final class ExcalidrawRuntimeTests: XCTestCase {
 
         let reloaded = ExcalidrawSessionOriginStore(recordURL: paths.originsRecordPath, portBase: 47_000, portSpan: 3_000)
         XCTAssertEqual(reloaded.preferredPort(for: sessionID), 55_555)
+    }
+
+    func testSessionOriginStoreRemovePortPrunesSessionEntry() throws {
+        let root = temporaryExcalidrawRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        struct OriginRecordMirror: Codable {
+            var portsBySessionID: [String: Int]
+        }
+
+        let firstSessionID = UUID()
+        let secondSessionID = UUID()
+        let paths = ExcalidrawRuntimePaths(sessionID: firstSessionID, rootDirectoryOverride: root)
+        let store = ExcalidrawSessionOriginStore(recordURL: paths.originsRecordPath, portBase: 47_000, portSpan: 3_000)
+
+        store.persistPort(55_001, for: firstSessionID)
+        store.persistPort(55_002, for: secondSessionID)
+        store.removePort(for: firstSessionID)
+
+        let data = try Data(contentsOf: paths.originsRecordPath)
+        let record = try JSONDecoder().decode(OriginRecordMirror.self, from: data)
+
+        XCTAssertNil(record.portsBySessionID[firstSessionID.uuidString])
+        XCTAssertEqual(record.portsBySessionID[secondSessionID.uuidString], 55_002)
     }
 
     private func temporaryExcalidrawRoot() -> URL {
