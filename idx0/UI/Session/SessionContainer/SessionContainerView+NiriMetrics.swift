@@ -17,6 +17,7 @@ extension SessionContainerView {
             headerHeight: 20,
             originX: max(20, containerSize.width * 0.5 - width * 0.5),
             originY: max(18, containerSize.height * 0.5 - height * 0.5),
+            containerWidth: containerSize.width,
             containerHeight: containerSize.height,
             canvasScale: scale
         )
@@ -114,6 +115,10 @@ extension SessionContainerView {
     }
 
     func niriColumnWidth(column: NiriColumn, metrics: NiriCanvasMetrics) -> CGFloat {
+        if let zoomedItemID = metrics.zoomedItemID,
+           column.items.contains(where: { $0.id == zoomedItemID }) {
+            return max(320, metrics.containerWidth - 12)
+        }
         let minWidth = niriColumnMinWidth(metrics: metrics)
         let maxWidth = niriColumnMaxWidth(metrics: metrics)
         let preferredWidth = column.preferredWidth.map { $0 * metrics.canvasScale }
@@ -129,6 +134,9 @@ extension SessionContainerView {
     }
 
     func niriItemHeight(item: NiriLayoutItem?, metrics: NiriCanvasMetrics) -> CGFloat {
+        if let zoomedItemID = metrics.zoomedItemID, item?.id == zoomedItemID {
+            return max(120, metrics.containerHeight - 12)
+        }
         let minHeight = niriItemMinHeight(metrics: metrics)
         let maxHeight = niriItemMaxHeight(metrics: metrics)
         guard let preferred = item?.preferredHeight else {

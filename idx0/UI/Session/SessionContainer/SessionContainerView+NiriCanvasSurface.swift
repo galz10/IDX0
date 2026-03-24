@@ -101,44 +101,23 @@ extension SessionContainerView {
         runtime: NiriCanvasRuntimeState,
         proxy: GeometryProxy
     ) -> some View {
-        let metrics = niriMetrics(
+        var metrics = niriMetrics(
             containerSize: proxy.size,
             isOverview: layout.isOverviewOpen
         )
         let activeWorkspaceIndex = niriActiveWorkspaceIndex(layout: layout) ?? 0
         let zoomedItemID = sessionService.niriFocusedTileZoomItemID(for: session.id)
-
-        let viewportContent: AnyView = {
-            if let zoomedItemID,
-               let path = sessionService.findNiriItemPath(layout: layout, itemID: zoomedItemID) {
-                return AnyView(
-                    niriFocusedTileZoomViewport(
-                        session: session,
-                        layout: layout,
-                        workspace: layout.workspaces[path.workspaceIndex],
-                        workspaceIndex: path.workspaceIndex,
-                        column: layout.workspaces[path.workspaceIndex].columns[path.columnIndex],
-                        columnIndex: path.columnIndex,
-                        item: layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex],
-                        metrics: metrics,
-                        proxySize: proxy.size
-                    )
-                )
-            }
-            return AnyView(
-                niriCanvasViewportLayer(
-                    session: session,
-                    layout: layout,
-                    runtime: runtime,
-                    metrics: metrics,
-                    activeWorkspaceIndex: activeWorkspaceIndex,
-                    proxySize: proxy.size
-                )
-            )
-        }()
+        metrics.zoomedItemID = zoomedItemID
 
         return niriCanvasKeyHandling(
-            viewportContent
+            niriCanvasViewportLayer(
+                session: session,
+                layout: layout,
+                runtime: runtime,
+                metrics: metrics,
+                activeWorkspaceIndex: activeWorkspaceIndex,
+                proxySize: proxy.size
+            )
             .clipped()
             .onAppear {
                 if niriRuntimeBySession[session.id] != nil {
@@ -193,16 +172,20 @@ extension SessionContainerView {
         let cameraOffsetY = runtime.cameraOffset.height + runtime.transientOffset.height
 
         ZStack(alignment: .topLeading) {
-            NiriDotGridBackground(
-                offsetX: cameraOffsetX,
-                offsetY: centeringY + cameraOffsetY
-            )
-            .overlay {
-                niriCanvasPanCapture(
-                    sessionID: session.id,
-                    layout: layout,
-                    metrics: metrics
+            if metrics.zoomedItemID != nil {
+                tc.windowBackground
+            } else {
+                NiriDotGridBackground(
+                    offsetX: cameraOffsetX,
+                    offsetY: centeringY + cameraOffsetY
                 )
+                .overlay {
+                    niriCanvasPanCapture(
+                        sessionID: session.id,
+                        layout: layout,
+                        metrics: metrics
+                    )
+                }
             }
 
             ForEach(Array(layout.workspaces.enumerated()), id: \.element.id) { workspaceIndex, workspace in
@@ -239,57 +222,6 @@ extension SessionContainerView {
                 sessionID: session.id,
                 isOverviewOpen: layout.isOverviewOpen
             )
-        }
-    }
-
-    func niriFocusedTileZoomViewport(
-        session: Session,
-        layout: NiriCanvasLayout,
-        workspace: NiriWorkspace,
-        workspaceIndex: Int,
-        column: NiriColumn,
-        columnIndex: Int,
-        item: NiriLayoutItem,
-        metrics: NiriCanvasMetrics,
-        proxySize: CGSize
-    ) -> some View {
-        let fullWidth = max(320, proxySize.width - 12)
-        let fullHeight = max(120, proxySize.height - 12)
-        let core = VStack(spacing: 0) {
-            niriCanvasItemHeader(
-                sessionID: session.id,
-                workspaceIndex: workspaceIndex,
-                columnIndex: columnIndex,
-                item: item,
-                isFocused: true
-            )
-            niriCanvasItemBodyContent(session: session, layout: layout, item: item)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(width: fullWidth, height: fullHeight)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .background(tc.surface0, in: RoundedRectangle(cornerRadius: 10))
-
-        let styled = niriCanvasItemStyled(
-            core,
-            layout: layout,
-            isFocused: true,
-            itemID: item.id
-        )
-        let interactive = niriCanvasItemInteractions(
-            styled,
-            session: session,
-            layout: layout,
-            workspace: workspace,
-            column: column,
-            item: item,
-            metrics: metrics
-        )
-
-        return ZStack {
-            tc.windowBackground
-            interactive
-                .padding(6)
         }
     }
 
@@ -438,7 +370,10 @@ extension SessionContainerView {
             }
             // Center the focused item in the viewport
             let focusedHeight = niriItemHeight(item: column.items[itemIdx], metrics: metrics)
-            let centeringAdjust = (containerSize.height - focusedHeight) / 2 - metrics.originY
+            // When zoomed, compensate for the workspace header + VStack spacing (28px)
+            // so the tile fills edge-to-edge within the viewport.
+            let headerCompensation: CGFloat = metrics.zoomedItemID != nil ? (metrics.headerHeight + 8) : 0
+            let centeringAdjust = (containerSize.height - focusedHeight) / 2 - metrics.originY - headerCompensation
             return -(yOffset - centeringAdjust)
         }
     }
