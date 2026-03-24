@@ -44,9 +44,11 @@ struct QuickSwitchOverlay: View {
                                 .foregroundStyle(tc.tertiaryText)
                         }
                         .buttonStyle(.plain)
+                        .idxHitTarget()
                     }
 
                     keyBadge("esc")
+                        .idxHitTarget()
                         .onTapGesture { dismiss() }
                 }
                 .padding(.horizontal, 12)

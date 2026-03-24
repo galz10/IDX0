@@ -32,9 +32,11 @@ struct RenameSessionSheet: View {
                             .foregroundStyle(tc.tertiaryText)
                     }
                     .buttonStyle(.plain)
+                    .idxHitTarget()
                 }
 
                 keyBadge("esc")
+                    .idxHitTarget()
                     .onTapGesture { coordinator.cancelRenameSession() }
             }
             .padding(.horizontal, 12)
@@ -67,6 +69,7 @@ struct RenameSessionSheet: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .idxHitTarget()
                 .disabled(coordinator.renameDraftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(.horizontal, 12)
