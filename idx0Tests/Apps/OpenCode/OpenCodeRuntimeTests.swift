@@ -137,11 +137,115 @@ final class OpenCodeRuntimeTests: XCTestCase {
         XCTAssertEqual(resolved, executablePath.path)
     }
 
+    func testStartupReportsProcessExitedBeforeReadyWhenProcessExitsEarly() async throws {
+        let root = temporaryOpenCodeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let binDirectory = root.appendingPathComponent("bin", isDirectory: true)
+        try FileManager.default.createDirectory(at: binDirectory, withIntermediateDirectories: true)
+        let executablePath = binDirectory.appendingPathComponent("opencode", isDirectory: false)
+        try writeExecutable(
+            """
+            #!/bin/sh
+            sleep 1
+            exit 1
+            """,
+            to: executablePath
+        )
+
+        let controller = OpenCodeTileController(
+            sessionID: UUID(),
+            itemID: UUID(),
+            launchDirectoryProvider: { FileManager.default.homeDirectoryForCurrentUser.path },
+            snapshotManager: OpenCodeStateSnapshotManager(),
+            rootDirectoryOverride: root,
+            executableSearchDirectoriesOverride: [binDirectory.path],
+            baseEnvironmentOverride: ["PATH": binDirectory.path],
+            readinessIntervalNanoseconds: 50_000_000,
+            readinessTimeoutSeconds: 2
+        )
+        defer { controller.stop() }
+
+        controller.ensureStarted()
+
+        let failureMessage = await waitForFailureMessage(controller, timeout: 4)
+        XCTAssertEqual(failureMessage, OpenCodeRuntimeError.processExitedBeforeReady.errorDescription)
+    }
+
+    func testStartupReportsMissingNodeWhenExecutableRequiresNodeAndNodeIsUnavailable() async throws {
+        let root = temporaryOpenCodeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let binDirectory = root.appendingPathComponent("bin", isDirectory: true)
+        try FileManager.default.createDirectory(at: binDirectory, withIntermediateDirectories: true)
+        let executablePath = binDirectory.appendingPathComponent("opencode", isDirectory: false)
+        try writeExecutable(
+            """
+            #!/usr/bin/env node
+            process.exit(0)
+            """,
+            to: executablePath
+        )
+
+        let runner = StubOpenCodeProcessRunner { executable, arguments, _ in
+            switch executable {
+            case "/usr/bin/which":
+                XCTAssertEqual(arguments, ["node"])
+            case "/bin/zsh":
+                XCTAssertTrue(
+                    arguments == ["-lc", "whence -p node"] ||
+                        arguments == ["-ilc", "whence -p node"]
+                )
+            default:
+                XCTFail("Unexpected executable probe: \(executable)")
+            }
+            return ProcessResult(exitCode: 1, stdout: "", stderr: "not found")
+        }
+
+        let controller = OpenCodeTileController(
+            sessionID: UUID(),
+            itemID: UUID(),
+            launchDirectoryProvider: { FileManager.default.homeDirectoryForCurrentUser.path },
+            snapshotManager: OpenCodeStateSnapshotManager(),
+            processRunner: runner,
+            rootDirectoryOverride: root,
+            executableSearchDirectoriesOverride: [binDirectory.path],
+            baseEnvironmentOverride: ["PATH": ""],
+            readinessIntervalNanoseconds: 50_000_000,
+            readinessTimeoutSeconds: 1
+        )
+        defer { controller.stop() }
+
+        controller.ensureStarted()
+
+        let failureMessage = await waitForFailureMessage(controller, timeout: 2)
+        XCTAssertEqual(failureMessage, OpenCodeRuntimeError.missingNodeExecutable.errorDescription)
+    }
+
     private func temporaryOpenCodeRoot() -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("idx0-opencode-runtime-tests-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
+    }
+
+    private func writeExecutable(_ content: String, to path: URL) throws {
+        try content.write(to: path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path.path)
+    }
+
+    private func waitForFailureMessage(
+        _ controller: OpenCodeTileController,
+        timeout: TimeInterval
+    ) async -> String? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if case .failed(let message, _) = controller.state {
+                return message
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return nil
     }
 }
 

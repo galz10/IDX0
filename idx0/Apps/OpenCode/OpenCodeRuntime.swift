@@ -153,9 +153,10 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
     private let processRunner: any ProcessRunnerProtocol
     private let paths: OpenCodeRuntimePaths
     private let executableSearchDirectoriesOverride: [String]?
+    private let baseEnvironmentOverride: [String: String]?
 
-    private let readinessIntervalNanoseconds: UInt64 = 250_000_000
-    private let readinessTimeoutSeconds: TimeInterval = 20
+    private let readinessIntervalNanoseconds: UInt64
+    private let readinessTimeoutSeconds: TimeInterval
     private let defaultZoom: CGFloat = 0.5
     private let minimumZoom: CGFloat = 0.5
     private let maximumZoom: CGFloat = 3.0
@@ -166,6 +167,7 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
     private var stderrPipe: Pipe?
     private var logHandle: FileHandle?
     private var userStopped = false
+    private var processExitedDuringStartup = false
 
     init(
         sessionID: UUID,
@@ -174,7 +176,10 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         snapshotManager: OpenCodeStateSnapshotManager,
         processRunner: any ProcessRunnerProtocol = ProcessRunner(),
         rootDirectoryOverride: URL? = nil,
-        executableSearchDirectoriesOverride: [String]? = nil
+        executableSearchDirectoriesOverride: [String]? = nil,
+        baseEnvironmentOverride: [String: String]? = nil,
+        readinessIntervalNanoseconds: UInt64 = 250_000_000,
+        readinessTimeoutSeconds: TimeInterval = 20
     ) {
         self.sessionID = sessionID
         self.itemID = itemID
@@ -183,6 +188,9 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         self.processRunner = processRunner
         self.paths = OpenCodeRuntimePaths(sessionID: sessionID, rootDirectoryOverride: rootDirectoryOverride)
         self.executableSearchDirectoriesOverride = executableSearchDirectoriesOverride
+        self.baseEnvironmentOverride = baseEnvironmentOverride
+        self.readinessIntervalNanoseconds = readinessIntervalNanoseconds
+        self.readinessTimeoutSeconds = readinessTimeoutSeconds
 
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -202,6 +210,7 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         }
 
         userStopped = false
+        processExitedDuringStartup = false
         startTask = Task { [weak self] in
             guard let self else { return }
             await self.runStartupSequence()
@@ -383,6 +392,7 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         let launchDirectory = resolvedLaunchDirectory()
 
         state = .starting
+        processExitedDuringStartup = false
         try launchProcess(
             executablePath: executablePath,
             port: port,
@@ -392,7 +402,7 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
 
         let ready = await waitForServerReady(port: port)
         guard ready else {
-            let exitedBeforeReady = (process?.isRunning == false)
+            let exitedBeforeReady = processExitedDuringStartup || (process?.isRunning == false)
             terminateProcess()
 
             if userStopped || Task.isCancelled {
@@ -533,7 +543,7 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         executablePath: String,
         environmentOverrides: [String: String]
     ) async throws -> [String: String] {
-        var environment = ProcessInfo.processInfo.environment
+        var environment = baseEnvironmentOverride ?? ProcessInfo.processInfo.environment
         var pathDirectories = uniqueDirectories(
             ((environment["PATH"] ?? "")
                 .split(separator: ":")
@@ -617,7 +627,7 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
             if Task.isCancelled || userStopped {
                 return false
             }
-            if process?.isRunning == false {
+            if processExitedDuringStartup || process?.isRunning == false {
                 return false
             }
             if await probeServerHealth(url: healthURL) {
@@ -649,6 +659,9 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
             "process exited status=\(terminatedProcess.terminationStatus) reason=\(terminatedProcess.terminationReason.rawValue)"
         )
 
+        if startTask != nil {
+            processExitedDuringStartup = true
+        }
         terminateProcess()
 
         guard !userStopped else { return }
