@@ -9,7 +9,7 @@ struct CommandPaletteOverlay: View {
     @FocusState private var queryFocused: Bool
     @State private var query = ""
     @State private var selectedIndex = 0
-    @State private var interactionReady = false
+    @State private var hoverReady = false
 
     var body: some View {
         ZStack {
@@ -68,7 +68,7 @@ struct CommandPaletteOverlay: View {
                                             executeSelected()
                                         }
                                         .onHover { hovering in
-                                            guard interactionReady, hovering, action.isEnabled else { return }
+                                            guard hoverReady, hovering, action.isEnabled else { return }
                                             selectedIndex = index
                                         }
                                 }
@@ -77,7 +77,6 @@ struct CommandPaletteOverlay: View {
                         }
                         .frame(maxHeight: 360)
                         .scrollIndicators(.hidden)
-                        .scrollDisabled(!interactionReady)
                         .onChange(of: selectedIndex) { _, newValue in
                             if let action = filteredActions.prefix(12).dropFirst(newValue).first {
                                 withAnimation(.easeOut(duration: 0.08)) {
@@ -109,12 +108,12 @@ struct CommandPaletteOverlay: View {
             .frame(maxHeight: .infinity, alignment: .top)
         }
         .onAppear {
-            interactionReady = false
+            hoverReady = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 queryFocused = true
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                interactionReady = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                hoverReady = true
             }
         }
         .onKeyPress(.escape) { dismiss(); return .handled }
