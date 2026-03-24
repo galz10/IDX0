@@ -10,6 +10,7 @@
 		036A444E148F29E56A156F65 /* TerminalThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 867382630242730813387E6E /* TerminalThemeTests.swift */; };
 		05FDC6EF2EA1379932BEC9FA /* FuzzyMatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8B40C0353C4A178B385EB0D /* FuzzyMatchTests.swift */; };
 		0613692C43B8253CCB9C741A /* KeyboardSettingsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD36B859D9782DE4AFD5826A /* KeyboardSettingsViews.swift */; };
+		066EDA0406A00EAD947B9D4F /* ExcalidrawRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60D85B87CD55FD320CDB088F /* ExcalidrawRuntimeTests.swift */; };
 		07C89D92818F32261899BDD6 /* DiffOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96E45E4AAE8F4224D124D10C /* DiffOverlayView.swift */; };
 		07EBB1F78F1F6C061A36BDC0 /* BrowserToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAEFA3D2F171F4CF5682027F /* BrowserToolbar.swift */; };
 		088437F15210B47390FC7DCD /* ShellPoolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42D76EDDAC2E2645252553FD /* ShellPoolService.swift */; };
@@ -18,6 +19,8 @@
 		0A82A6B83B1252493812FBE4 /* NiriOnboardingGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 922E70866C06A866A454B057 /* NiriOnboardingGateTests.swift */; };
 		0AAB60544A1674A37048A3BB /* GhosttyTerminalSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CDE1C5DA7C67BFB9E74E578 /* GhosttyTerminalSurface.swift */; };
 		0ABF7787B802889756B0D2A1 /* InlineAdvancedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12978EF6AC1D54BA282486F1 /* InlineAdvancedSettings.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* OpenCodeRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F60718293A4B5C6D7E /* OpenCodeRuntime.swift */; };
+		B2C3D4E5F60718293A4B5C6D /* OpenCodeRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F60718293A4B5C6D7E8F /* OpenCodeRuntimeTests.swift */; };
 		0CBD7B3254B4240D37865331 /* SessionSettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 714F5099FB5B255B533B9993 /* SessionSettingsTab.swift */; };
 		0DB0C74997CFC15B9535105D /* SessionCreationResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5C9A58C93C0BA47A57C70B5 /* SessionCreationResult.swift */; };
 		0FB090602494B2B0F0F4823B /* terminal-themes.json in Resources */ = {isa = PBXBuildFile; fileRef = 57FC8B1654F989A31FC64476 /* terminal-themes.json */; };
@@ -26,6 +29,7 @@
 		131CEB0DEE775C1C144BFDAB /* SessionService+NiriCanvasOps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 769DAB2595E31721E2C06C50 /* SessionService+NiriCanvasOps.swift */; };
 		137E9BBDEACCB42A8B5729C5 /* SessionSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0884C8A5D1749BC2E9960939 /* SessionSidebarView.swift */; };
 		14C0D821CC6791410D9ED09A /* ShortcutActionID.swift in Sources */ = {isa = PBXBuildFile; fileRef = E51C372C3C84AB24712625F5 /* ShortcutActionID.swift */; };
+		14D7D7D82D5BB685BDCE5851 /* excalidraw-build-manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = DFEC4330AF1DE7C978BA59E8 /* excalidraw-build-manifest.json */; };
 		171E27C515BB614D1D8283B6 /* InlineSafetySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBE452CDCBD97B412A836AE6 /* InlineSafetySettings.swift */; };
 		18FBDF897EAC7B0F4E8503FD /* SessionContainerView+NiriDragResize.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A3B6B056A35C674DB49A2E /* SessionContainerView+NiriDragResize.swift */; };
 		1A4F10D868A0E1ADE5022C32 /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = E040B0FC30190D925785844A /* Session.swift */; };
@@ -83,6 +87,7 @@
 		65200888D24F5413E7FAD56E /* LayoutState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8517E677C5C358D38F1205 /* LayoutState.swift */; };
 		66DA7EF1CBC590A839516599 /* ShortcutCommandDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 207837FF9E845CF7CF878E93 /* ShortcutCommandDispatcher.swift */; };
 		686A29E7530965CAB3B0C7AD /* BranchNameGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FAA48CE62DBA9F6416478A8 /* BranchNameGenerator.swift */; };
+		698A62FE3D639CA79113BE2A /* ExcalidrawRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF59ED0F82787D85C955F4E /* ExcalidrawRuntime.swift */; };
 		69D61B8290DCFD28F70CBDAA /* WorkflowModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8966AEA81C75928E237AA817 /* WorkflowModels.swift */; };
 		6CE7AAF4682FDAFAFECE3B7D /* WorkflowStores.swift in Sources */ = {isa = PBXBuildFile; fileRef = E348CC63163C1B52E07B8506 /* WorkflowStores.swift */; };
 		6D5F242BF42126B4C201A625 /* VSCodeRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F7FCA5B2CB17DD2E1C5B0EE /* VSCodeRuntimeTests.swift */; };
@@ -217,6 +222,8 @@
 		1F14A30AD385DAFB54FC4455 /* idx0Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = idx0Tests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1F79E05AB6D634F53DE988F5 /* T3CodeRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = T3CodeRuntimeTests.swift; sourceTree = "<group>"; };
 		1F7FCA5B2CB17DD2E1C5B0EE /* VSCodeRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeRuntimeTests.swift; sourceTree = "<group>"; };
+		C3D4E5F60718293A4B5C6D7E /* OpenCodeRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeRuntime.swift; sourceTree = "<group>"; };
+		D4E5F60718293A4B5C6D7E8F /* OpenCodeRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeRuntimeTests.swift; sourceTree = "<group>"; };
 		1FAA48CE62DBA9F6416478A8 /* BranchNameGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BranchNameGenerator.swift; sourceTree = "<group>"; };
 		207837FF9E845CF7CF878E93 /* ShortcutCommandDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCommandDispatcher.swift; sourceTree = "<group>"; };
 		222303CE45BB8A9C50FAD2C4 /* WorkflowCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowCard.swift; sourceTree = "<group>"; };
@@ -264,6 +271,7 @@
 		5EE0EA539A5FA658D27887F8 /* ghostty.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ghostty.h; sourceTree = "<group>"; };
 		5F8EAB1EE8E31AFAE297503B /* NiriAppRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NiriAppRegistryTests.swift; sourceTree = "<group>"; };
 		603A01395B9650650ACB1F9B /* SessionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionService.swift; sourceTree = "<group>"; };
+		60D85B87CD55FD320CDB088F /* ExcalidrawRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExcalidrawRuntimeTests.swift; sourceTree = "<group>"; };
 		62F2373B9A7B8F540F8214FD /* ShortcutValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutValidator.swift; sourceTree = "<group>"; };
 		637F53E30E925BBEEC83DB9B /* KeyChord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyChord.swift; sourceTree = "<group>"; };
 		64F54BC57F8B1D33CACD3BDB /* GitMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitMonitor.swift; sourceTree = "<group>"; };
@@ -342,8 +350,10 @@
 		D9962C2537A206B836AAA1CE /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		D9A3B6B056A35C674DB49A2E /* SessionContainerView+NiriDragResize.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionContainerView+NiriDragResize.swift"; sourceTree = "<group>"; };
 		D9AEFE7132B90AF0A032108D /* AppCoordinator+ShortcutCommandDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppCoordinator+ShortcutCommandDispatcher.swift"; sourceTree = "<group>"; };
+		DAF59ED0F82787D85C955F4E /* ExcalidrawRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExcalidrawRuntime.swift; sourceTree = "<group>"; };
 		DB1775F64883C385AC9E7EEA /* WorktreeInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeInfo.swift; sourceTree = "<group>"; };
 		DD36B859D9782DE4AFD5826A /* KeyboardSettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSettingsViews.swift; sourceTree = "<group>"; };
+		DFEC4330AF1DE7C978BA59E8 /* excalidraw-build-manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "excalidraw-build-manifest.json"; sourceTree = "<group>"; };
 		E03201642735DCA04A98616C /* SessionContainerView+NiriGestures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionContainerView+NiriGestures.swift"; sourceTree = "<group>"; };
 		E040B0FC30190D925785844A /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
 		E348CC63163C1B52E07B8506 /* WorkflowStores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowStores.swift; sourceTree = "<group>"; };
@@ -393,6 +403,14 @@
 				1F7FCA5B2CB17DD2E1C5B0EE /* VSCodeRuntimeTests.swift */,
 			);
 			path = VSCode;
+			sourceTree = "<group>";
+		};
+		F60718293A4B5C6D7E8F9012 /* OpenCode */ = {
+			isa = PBXGroup;
+			children = (
+				D4E5F60718293A4B5C6D7E8F /* OpenCodeRuntimeTests.swift */,
+			);
+			path = OpenCode;
 			sourceTree = "<group>";
 		};
 		14832EBBB7937521D97894B7 /* App */ = {
@@ -510,8 +528,10 @@
 		4365BADF2634DD8B0B055C45 /* Apps */ = {
 			isa = PBXGroup;
 			children = (
+				A0153BB7359B4F14866A3A5B /* Excalidraw */,
 				F10EF007191D14CF7D249BA4 /* T3Code */,
 				1194C0592BDF22BD406C09A1 /* VSCode */,
+				F60718293A4B5C6D7E8F9012 /* OpenCode */,
 			);
 			path = Apps;
 			sourceTree = "<group>";
@@ -529,12 +549,28 @@
 			path = Services;
 			sourceTree = "<group>";
 		};
+		57BBF569C19DB83BFFCF9386 /* Excalidraw */ = {
+			isa = PBXGroup;
+			children = (
+				DAF59ED0F82787D85C955F4E /* ExcalidrawRuntime.swift */,
+			);
+			path = Excalidraw;
+			sourceTree = "<group>";
+		};
 		621B3AF26F6F5F6CF82AF166 /* VSCode */ = {
 			isa = PBXGroup;
 			children = (
 				A4CE738D0D42BB63C71A00FE /* VSCodeRuntime.swift */,
 			);
 			path = VSCode;
+			sourceTree = "<group>";
+		};
+		E5F60718293A4B5C6D7E8F90 /* OpenCode */ = {
+			isa = PBXGroup;
+			children = (
+				C3D4E5F60718293A4B5C6D7E /* OpenCodeRuntime.swift */,
+			);
+			path = OpenCode;
 			sourceTree = "<group>";
 		};
 		62A63927E1863A15DE054425 /* Browser */ = {
@@ -674,6 +710,14 @@
 			path = Sources/IPCShared;
 			sourceTree = "<group>";
 		};
+		A0153BB7359B4F14866A3A5B /* Excalidraw */ = {
+			isa = PBXGroup;
+			children = (
+				60D85B87CD55FD320CDB088F /* ExcalidrawRuntimeTests.swift */,
+			);
+			path = Excalidraw;
+			sourceTree = "<group>";
+		};
 		AF18F409670833FE789994F5 /* Git */ = {
 			isa = PBXGroup;
 			children = (
@@ -712,6 +756,7 @@
 			isa = PBXGroup;
 			children = (
 				D1D4C1C59381DEB755085208 /* Assets.xcassets */,
+				DFEC4330AF1DE7C978BA59E8 /* excalidraw-build-manifest.json */,
 				72CCCD57FC8E6C67F1BC4E0D /* idx0-icon.icon */,
 				B5048750915F84088FED8574 /* idx0.icns */,
 				150785B3AEE2598ED5427E3D /* idx0.icns.backup-20260322-075809 */,
@@ -781,8 +826,10 @@
 			isa = PBXGroup;
 			children = (
 				EBBA45F552AB22BE4D13D991 /* Core */,
+				57BBF569C19DB83BFFCF9386 /* Excalidraw */,
 				0848A2A746C74F4F4070941D /* T3Code */,
 				621B3AF26F6F5F6CF82AF166 /* VSCode */,
+				E5F60718293A4B5C6D7E8F90 /* OpenCode */,
 			);
 			path = Apps;
 			sourceTree = "<group>";
@@ -961,6 +1008,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5EF9A714D8C684B843006A0E /* Assets.xcassets in Resources */,
+				14D7D7D82D5BB685BDCE5851 /* excalidraw-build-manifest.json in Resources */,
 				82D049E4AC737CFE1246492E /* idx0-icon.icon in Resources */,
 				A50FCD80554EC338D5BA1C99 /* idx0.icns in Resources */,
 				2EE1C95E4D9823EA95497533 /* idx0.icns.backup-20260322-075809 in Resources */,
@@ -983,6 +1031,7 @@
 				8323E5B818F6AF91B355CA11 /* AutoCheckpointServiceTests.swift in Sources */,
 				22B1B9E0EA022D8228A26BC9 /* BranchNameGeneratorTests.swift in Sources */,
 				E39960209C6BA428A922B5E0 /* BrowserDataStoreTests.swift in Sources */,
+				066EDA0406A00EAD947B9D4F /* ExcalidrawRuntimeTests.swift in Sources */,
 				05FDC6EF2EA1379932BEC9FA /* FuzzyMatchTests.swift in Sources */,
 				9F6995C2F654B9422548C148 /* GitServiceParsingTests.swift in Sources */,
 				E8ADEE219025F24923A990A7 /* LayoutStateTests.swift in Sources */,
@@ -998,6 +1047,7 @@
 				E72847AEEF99AC4FF921A86E /* ShortcutRegistryTests.swift in Sources */,
 				AFE3451E6F9A754B645F9435 /* SupervisionQueueServiceTests.swift in Sources */,
 				58987615D32B830F852135E5 /* T3CodeRuntimeTests.swift in Sources */,
+				B2C3D4E5F60718293A4B5C6D /* OpenCodeRuntimeTests.swift in Sources */,
 				036A444E148F29E56A156F65 /* TerminalThemeTests.swift in Sources */,
 				6D5F242BF42126B4C201A625 /* VSCodeRuntimeTests.swift in Sources */,
 				E2B377CCEA8EC06AC24CFDE8 /* WorkflowModelsTests.swift in Sources */,
@@ -1032,6 +1082,7 @@
 				534ADFC85488135D61AE5A30 /* Debouncer.swift in Sources */,
 				07C89D92818F32261899BDD6 /* DiffOverlayView.swift in Sources */,
 				8BF129880FF444F438569691 /* EmptyStateView.swift in Sources */,
+				698A62FE3D639CA79113BE2A /* ExcalidrawRuntime.swift in Sources */,
 				F7EC6D8E4650E5265FBE2611 /* FileSystemPaths.swift in Sources */,
 				30915753502A046414C2D61F /* FirstRunSheet.swift in Sources */,
 				A23649679F38533F0195A526 /* FuzzyMatch.swift in Sources */,
@@ -1121,6 +1172,7 @@
 				8EBD5438089ADC23B4BB26F1 /* SidebarResizeHandle.swift in Sources */,
 				860E1AE5892CF200352256FC /* SupervisionQueueService.swift in Sources */,
 				C4BF4ED638BB64C3380B9C1F /* T3CodeRuntime.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* OpenCodeRuntime.swift in Sources */,
 				893B94051D5F59B2413D91BC /* TabBarOverlay.swift in Sources */,
 				64447C377FF57F3FD4ED4CC9 /* TerminalMonitorService.swift in Sources */,
 				63CB95EF0E4145A598612B03 /* TerminalSessionController.swift in Sources */,

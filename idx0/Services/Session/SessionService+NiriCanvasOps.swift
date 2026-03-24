@@ -69,16 +69,8 @@ extension SessionService {
         guard let workspaceIndex = activeWorkspaceIndex(layout: layout) else { return nil }
 
         let itemID = UUID()
-        let item = NiriLayoutItem(
-            id: itemID,
-            ref: .terminal(tabID: tabID)
-        )
-        let newColumn = NiriColumn(
-            id: UUID(),
-            items: [item],
-            focusedItemID: itemID,
-            displayMode: settings.niri.defaultColumnDisplayMode
-        )
+        let item = makeNiriLayoutItem(id: itemID, ref: .terminal(tabID: tabID))
+        let newColumn = makeNiriColumn(id: UUID(), items: [item], focusedItemID: itemID)
 
         let insertionIndex: Int
         if let activeColumnIndex = activeColumnIndex(layout: layout, workspaceIndex: workspaceIndex) {
@@ -106,22 +98,14 @@ extension SessionService {
         guard let workspaceIndex = activeWorkspaceIndex(layout: layout) else { return nil }
 
         let itemID = UUID()
-        let item = NiriLayoutItem(
-            id: itemID,
-            ref: .terminal(tabID: tabID)
-        )
+        let item = makeNiriLayoutItem(id: itemID, ref: .terminal(tabID: tabID))
 
         if let columnIndex = activeColumnIndex(layout: layout, workspaceIndex: workspaceIndex) {
             layout.workspaces[workspaceIndex].columns[columnIndex].items.append(item)
             layout.workspaces[workspaceIndex].columns[columnIndex].focusedItemID = itemID
             layout.camera.activeColumnID = layout.workspaces[workspaceIndex].columns[columnIndex].id
         } else {
-            let fallbackColumn = NiriColumn(
-                id: UUID(),
-                items: [item],
-                focusedItemID: itemID,
-                displayMode: settings.niri.defaultColumnDisplayMode
-            )
+            let fallbackColumn = makeNiriColumn(id: UUID(), items: [item], focusedItemID: itemID)
             layout.workspaces[workspaceIndex].columns.append(fallbackColumn)
             layout.camera.activeColumnID = fallbackColumn.id
         }
@@ -151,13 +135,8 @@ extension SessionService {
 
         guard let workspaceIndex = activeWorkspaceIndex(layout: layout) else { return nil }
         let itemID = UUID()
-        let browserItem = NiriLayoutItem(id: itemID, ref: .browser)
-        let browserColumn = NiriColumn(
-            id: UUID(),
-            items: [browserItem],
-            focusedItemID: itemID,
-            displayMode: settings.niri.defaultColumnDisplayMode
-        )
+        let browserItem = makeNiriLayoutItem(id: itemID, ref: .browser)
+        let browserColumn = makeNiriColumn(id: UUID(), items: [browserItem], focusedItemID: itemID)
 
         let insertionIndex: Int
         if let columnIndex = activeColumnIndex(layout: layout, workspaceIndex: workspaceIndex) {
@@ -194,13 +173,8 @@ extension SessionService {
 
         guard let workspaceIndex = activeWorkspaceIndex(layout: layout) else { return nil }
         let itemID = UUID()
-        let appItem = NiriLayoutItem(id: itemID, ref: .app(appID: appID))
-        let appColumn = NiriColumn(
-            id: UUID(),
-            items: [appItem],
-            focusedItemID: itemID,
-            displayMode: settings.niri.defaultColumnDisplayMode
-        )
+        let appItem = makeNiriLayoutItem(id: itemID, ref: .app(appID: appID))
+        let appColumn = makeNiriColumn(id: UUID(), items: [appItem], focusedItemID: itemID)
 
         let insertionIndex: Int
         if let columnIndex = activeColumnIndex(layout: layout, workspaceIndex: workspaceIndex) {
@@ -336,7 +310,46 @@ extension SessionService {
         ensureNiriLayout(for: sessionID)
         guard var layout = niriLayoutsBySession[sessionID] else { return }
         layout.isOverviewOpen.toggle()
+        if layout.isOverviewOpen {
+            niriFocusedTileZoomItemIDBySession.removeValue(forKey: sessionID)
+        }
         niriLayoutsBySession[sessionID] = layout
+    }
+
+    func niriFocusedTileZoomItemID(for sessionID: UUID) -> UUID? {
+        guard let zoomedItemID = niriFocusedTileZoomItemIDBySession[sessionID] else { return nil }
+        guard let layout = niriLayoutsBySession[sessionID],
+              findNiriItemPath(layout: layout, itemID: zoomedItemID) != nil else {
+            niriFocusedTileZoomItemIDBySession.removeValue(forKey: sessionID)
+            return nil
+        }
+        return zoomedItemID
+    }
+
+    @discardableResult
+    func toggleNiriFocusedTileZoom(sessionID: UUID) -> Bool {
+        ensureNiriLayout(for: sessionID)
+        guard var layout = niriLayoutsBySession[sessionID],
+              let focusedItemID = layout.camera.focusedItemID,
+              findNiriItemPath(layout: layout, itemID: focusedItemID) != nil else {
+            return false
+        }
+
+        if layout.isOverviewOpen {
+            layout.isOverviewOpen = false
+            niriLayoutsBySession[sessionID] = layout
+        }
+
+        if niriFocusedTileZoomItemIDBySession[sessionID] == focusedItemID {
+            niriFocusedTileZoomItemIDBySession.removeValue(forKey: sessionID)
+        } else {
+            niriFocusedTileZoomItemIDBySession[sessionID] = focusedItemID
+        }
+        return true
+    }
+
+    func clearNiriFocusedTileZoom(sessionID: UUID) {
+        niriFocusedTileZoomItemIDBySession.removeValue(forKey: sessionID)
     }
 
     func toggleNiriColumnTabbedDisplay(sessionID: UUID) {
@@ -511,11 +524,10 @@ extension SessionService {
             layout.workspaces[destinationWorkspaceIndex].columns[destinationColumnIndex].focusedItemID = item.id
             layout.camera.activeColumnID = layout.workspaces[destinationWorkspaceIndex].columns[destinationColumnIndex].id
         } else {
-            let column = NiriColumn(
+            let column = makeNiriColumn(
                 id: UUID(),
                 items: [item],
-                focusedItemID: item.id,
-                displayMode: settings.niri.defaultColumnDisplayMode
+                focusedItemID: item.id
             )
             layout.workspaces[destinationWorkspaceIndex].columns.append(column)
             layout.camera.activeColumnID = column.id
@@ -540,11 +552,10 @@ extension SessionService {
         else { return }
 
         let item = layout.workspaces[sourcePath.workspaceIndex].columns[sourcePath.columnIndex].items.remove(at: sourcePath.itemIndex)
-        let newColumn = NiriColumn(
+        let newColumn = makeNiriColumn(
             id: UUID(),
             items: [item],
-            focusedItemID: item.id,
-            displayMode: settings.niri.defaultColumnDisplayMode
+            focusedItemID: item.id
         )
         let safeIndex = max(0, min(insertionIndex, layout.workspaces[destinationWorkspaceIndex].columns.count))
         layout.workspaces[destinationWorkspaceIndex].columns.insert(newColumn, at: safeIndex)

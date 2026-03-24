@@ -114,11 +114,13 @@ extension SessionContainerView {
         runtime: NiriCanvasRuntimeState,
         proxy: GeometryProxy
     ) -> some View {
-        let metrics = niriMetrics(
+        var metrics = niriMetrics(
             containerSize: proxy.size,
             isOverview: layout.isOverviewOpen
         )
         let activeWorkspaceIndex = niriActiveWorkspaceIndex(layout: layout) ?? 0
+        let zoomedItemID = sessionService.niriFocusedTileZoomItemID(for: session.id)
+        metrics.zoomedItemID = zoomedItemID
 
         return niriCanvasKeyHandling(
             niriCanvasViewportLayer(
@@ -143,12 +145,14 @@ extension SessionContainerView {
                 niriRuntimeBySession[session.id]?.lastContainerSize = newSize
             },
             sessionID: session.id,
-            isOverviewOpen: layout.isOverviewOpen
+            isOverviewOpen: layout.isOverviewOpen,
+            isFocusedTileZoomed: zoomedItemID != nil
         )
         .animation(.spring(duration: 0.35, bounce: 0.08), value: layout.isOverviewOpen)
         .animation(.spring(duration: 0.25, bounce: 0), value: layout.camera.focusedItemID)
         .animation(.spring(duration: 0.25, bounce: 0), value: layout.camera.activeColumnID)
         .animation(.spring(duration: 0.25, bounce: 0), value: layout.camera.activeWorkspaceID)
+        .animation(.spring(duration: 0.25, bounce: 0), value: zoomedItemID)
         .overlay {
             if let osdText = niriWorkspaceSwitchOSD {
                 Text(osdText)
@@ -181,16 +185,20 @@ extension SessionContainerView {
         let cameraOffsetY = runtime.cameraOffset.height + runtime.transientOffset.height
 
         ZStack(alignment: .topLeading) {
-            NiriDotGridBackground(
-                offsetX: cameraOffsetX,
-                offsetY: centeringY + cameraOffsetY
-            )
-            .overlay {
-                niriCanvasPanCapture(
-                    sessionID: session.id,
-                    layout: layout,
-                    metrics: metrics
+            if metrics.zoomedItemID != nil {
+                tc.windowBackground
+            } else {
+                NiriDotGridBackground(
+                    offsetX: cameraOffsetX,
+                    offsetY: centeringY + cameraOffsetY
                 )
+                .overlay {
+                    niriCanvasPanCapture(
+                        sessionID: session.id,
+                        layout: layout,
+                        metrics: metrics
+                    )
+                }
             }
 
             ForEach(Array(layout.workspaces.enumerated()), id: \.element.id) { workspaceIndex, workspace in
@@ -281,7 +289,8 @@ extension SessionContainerView {
     func niriCanvasKeyHandling<Content: View>(
         _ content: Content,
         sessionID: UUID,
-        isOverviewOpen: Bool
+        isOverviewOpen: Bool,
+        isFocusedTileZoomed: Bool
     ) -> some View {
         content
             .onKeyPress(.upArrow) {
@@ -310,6 +319,10 @@ extension SessionContainerView {
                 return .handled
             }
             .onKeyPress(.escape) {
+                if isFocusedTileZoomed {
+                    sessionService.clearNiriFocusedTileZoom(sessionID: sessionID)
+                    return .handled
+                }
                 guard isOverviewOpen else { return .ignored }
                 sessionService.toggleNiriOverview(sessionID: sessionID)
                 return .handled
@@ -370,7 +383,10 @@ extension SessionContainerView {
             }
             // Center the focused item in the viewport
             let focusedHeight = niriItemHeight(item: column.items[itemIdx], metrics: metrics)
-            let centeringAdjust = (containerSize.height - focusedHeight) / 2 - metrics.originY
+            // When zoomed, compensate for the workspace header + VStack spacing (28px)
+            // so the tile fills edge-to-edge within the viewport.
+            let headerCompensation: CGFloat = metrics.zoomedItemID != nil ? (metrics.headerHeight + 8) : 0
+            let centeringAdjust = (containerSize.height - focusedHeight) / 2 - metrics.originY - headerCompensation
             return -(yOffset - centeringAdjust)
         }
     }

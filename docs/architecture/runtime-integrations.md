@@ -90,6 +90,8 @@ Current built-ins:
 
 - `t3-code` tile runtime (`idx0/Apps/T3Code/T3CodeRuntime.swift`)
 - `vscode` tile runtime (`idx0/Apps/VSCode/VSCodeRuntime.swift`)
+- `excalidraw` tile runtime (`idx0/Apps/Excalidraw/ExcalidrawRuntime.swift`)
+- `opencode` tile runtime (`idx0/Apps/OpenCode/OpenCodeRuntime.swift`)
 
 Descriptor fields define:
 
@@ -129,7 +131,31 @@ Key capabilities:
 - Per-session user-data/extensions directories with profile seeding
 - Runtime state surfaced to tile UI (`provisioning`, `downloading`, `live`, etc.)
 
-## 8. Integration Risk Checklist
+## 8. Excalidraw Runtime Details
+
+Primary file: `idx0/Apps/Excalidraw/ExcalidrawRuntime.swift`
+
+Key capabilities:
+
+- Manifest-driven clone/build/run flow (`excalidraw-build-manifest.json`)
+- Build reuse when artifacts and build record match pinned commit
+- Session-stable origin mapping via persisted loopback port assignment
+- Local static serving into `WKWebView` with retryable startup behavior
+- Runtime state surfaced to tile UI (`preparingSource`, `building`, `live`, etc.)
+
+## 9. OpenCode Runtime Details
+
+Primary file: `idx0/Apps/OpenCode/OpenCodeRuntime.swift`
+
+Key capabilities:
+
+- Launches OpenCode in serve mode without auto-opening a browser.
+- Uses per-session isolated `XDG_*` directories under app support.
+- Probes readiness via `GET /global/health` before loading tile `WKWebView`.
+- Captures runtime stdout/stderr into per-session runtime logs.
+- Supports retry/stop/log-open and in-tile web zoom adjustments.
+
+## 10. Integration Risk Checklist
 
 Before merging integration changes:
 

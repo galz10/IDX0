@@ -54,6 +54,7 @@ extension SessionService {
         tabsBySession.removeValue(forKey: id)
         selectedTabIDBySession.removeValue(forKey: id)
         niriLayoutsBySession.removeValue(forKey: id)
+        niriFocusedTileZoomItemIDBySession.removeValue(forKey: id)
         paneTrees.removeValue(forKey: id)
         focusedPaneControllerID.removeValue(forKey: id)
 
@@ -258,6 +259,30 @@ extension SessionService {
             },
             provisioner: vscodeProvisioner,
             snapshotManager: vscodeSnapshotManager
+        )
+    }
+
+    func makeNiriExcalidrawController(sessionID: UUID, itemID: UUID) -> ExcalidrawTileController? {
+        guard sessions.contains(where: { $0.id == sessionID }) else { return nil }
+        return ExcalidrawTileController(
+            sessionID: sessionID,
+            itemID: itemID,
+            launchDirectoryProvider: { [weak self] in
+                self?.launchDirectory(for: sessionID) ?? FileManager.default.homeDirectoryForCurrentUser.path
+            },
+            buildCoordinator: excalidrawBuildCoordinator
+        )
+    }
+
+    func makeNiriOpenCodeController(sessionID: UUID, itemID: UUID) -> OpenCodeTileController? {
+        guard sessions.contains(where: { $0.id == sessionID }) else { return nil }
+        return OpenCodeTileController(
+            sessionID: sessionID,
+            itemID: itemID,
+            launchDirectoryProvider: { [weak self] in
+                self?.launchDirectory(for: sessionID) ?? FileManager.default.homeDirectoryForCurrentUser.path
+            },
+            snapshotManager: openCodeSnapshotManager
         )
     }
 

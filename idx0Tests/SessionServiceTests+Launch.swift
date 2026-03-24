@@ -195,6 +195,43 @@ extension SessionServiceTests {
         XCTAssertEqual(output, commandPath)
     }
 
+    func testTerminalStartupTemplateExpansionReplacesWorkdirAndSessionID() throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+        let sessionID = UUID()
+        let workdir = "/tmp/idx0 folder"
+
+        service.saveSettings { settings in
+            settings.terminalStartupCommandTemplate = "cd ${WORKDIR} && echo ${SESSION_ID}"
+        }
+
+        let expanded = service.expandedTerminalStartupCommand(
+            for: sessionID,
+            launchDirectory: workdir
+        )
+
+        XCTAssertEqual(
+            expanded,
+            "cd '\(workdir)' && echo \(sessionID.uuidString)"
+        )
+    }
+
+    func testTerminalStartupTemplateExpansionReturnsNilForEmptyTemplate() throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        service.saveSettings { settings in
+            settings.terminalStartupCommandTemplate = "   "
+        }
+
+        XCTAssertNil(
+            service.expandedTerminalStartupCommand(
+                for: UUID(),
+                launchDirectory: "/tmp"
+            )
+        )
+    }
+
     func testRelaunchUsesPersistedManifestWhenSessionLaunchCwdIsStale() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("idx0-service-manifest-primary-\(UUID().uuidString)", isDirectory: true)

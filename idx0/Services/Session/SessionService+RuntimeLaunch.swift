@@ -104,6 +104,11 @@ extension SessionService {
             launchBlockedReason: launchPreparation.launchBlockedReason,
             host: host
         )
+        queueTerminalStartupCommandIfNeeded(
+            controller: controller,
+            ownerSessionID: ownerSessionID,
+            launchDirectory: launchPreparation.launchDirectory
+        )
         launchStartedAtByControllerID[controllerID] = Date()
         launchUsedWrapperByControllerID[controllerID] = (launchPreparation.commandPath != session.shellPath)
         launchInitializedControllerIDs.remove(controllerID)

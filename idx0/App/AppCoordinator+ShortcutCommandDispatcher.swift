@@ -13,6 +13,7 @@ extension AppCoordinator {
         .niriToggleOverview, .niriConfirmSelection, .niriToggleColumnTabbedDisplay,
         .niriToggleSnap, .niriFocusWorkspaceUp, .niriFocusWorkspaceDown,
         .niriMoveColumnToWorkspaceUp, .niriMoveColumnToWorkspaceDown,
+        .niriToggleFocusedTileZoom,
         .splitRight, .splitDown, .closePane, .nextPane, .previousPane,
     ]
 
@@ -125,6 +126,7 @@ extension AppCoordinator {
              .niriToggleOverview, .niriConfirmSelection, .niriToggleColumnTabbedDisplay,
              .niriToggleSnap, .niriFocusWorkspaceUp, .niriFocusWorkspaceDown,
              .niriMoveColumnToWorkspaceUp, .niriMoveColumnToWorkspaceDown,
+             .niriToggleFocusedTileZoom,
              .niriZoomInFocusedWebTile, .niriZoomOutFocusedWebTile:
             return false
         }
@@ -283,6 +285,9 @@ extension AppCoordinator {
             guard niriEnabled, let selectedSessionID else { return false }
             sessionService.moveNiriColumnToWorkspaceDown(sessionID: selectedSessionID)
             return true
+        case .niriToggleFocusedTileZoom:
+            guard niriEnabled, let selectedSessionID else { return false }
+            return sessionService.toggleNiriFocusedTileZoom(sessionID: selectedSessionID)
         case .niriZoomInFocusedWebTile:
             guard niriEnabled, let selectedSessionID else { return false }
             return sessionService.adjustNiriFocusedWebTileZoom(for: selectedSessionID, delta: 0.1)

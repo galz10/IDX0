@@ -231,6 +231,60 @@ extension SessionServiceTests {
         XCTAssertEqual(layout.camera.focusedItemID, firstVSCodeID)
     }
 
+    func testNiriAddExcalidrawReusesExistingTileAndFocusesIt() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Excalidraw Reuse")).session
+        service.ensureNiriLayoutState(for: session.id)
+
+        guard let firstExcalidrawID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw) else {
+            XCTFail("Expected Excalidraw tile")
+            return
+        }
+
+        _ = service.niriAddTerminalRight(in: session.id)
+        let secondResult = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw)
+        XCTAssertEqual(secondResult, firstExcalidrawID)
+
+        let layout = service.niriLayout(for: session.id)
+        let excalidrawItems = layout.workspaces
+            .flatMap(\.columns)
+            .flatMap(\.items)
+            .filter { item in
+                item.ref.appID == NiriAppID.excalidraw
+            }
+        XCTAssertEqual(excalidrawItems.count, 1)
+        XCTAssertEqual(layout.camera.focusedItemID, firstExcalidrawID)
+    }
+
+    func testNiriAddOpenCodeReusesExistingTileAndFocusesIt() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri OpenCode Reuse")).session
+        service.ensureNiriLayoutState(for: session.id)
+
+        guard let firstOpenCodeID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.openCode) else {
+            XCTFail("Expected OpenCode tile")
+            return
+        }
+
+        _ = service.niriAddTerminalRight(in: session.id)
+        let secondResult = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.openCode)
+        XCTAssertEqual(secondResult, firstOpenCodeID)
+
+        let layout = service.niriLayout(for: session.id)
+        let openCodeItems = layout.workspaces
+            .flatMap(\.columns)
+            .flatMap(\.items)
+            .filter { item in
+                item.ref.appID == NiriAppID.openCode
+            }
+        XCTAssertEqual(openCodeItems.count, 1)
+        XCTAssertEqual(layout.camera.focusedItemID, firstOpenCodeID)
+    }
+
     func testCloseNiriFocusedT3TileRemovesItemAndController() async throws {
         let fixture = try Fixture()
         let service = fixture.service
@@ -303,6 +357,104 @@ extension SessionServiceTests {
         assertHasSingleTrailingEmptyWorkspace(layout)
     }
 
+    func testCloseNiriFocusedExcalidrawTileRemovesItemAndController() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Close Excalidraw")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let itemID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw) else {
+            XCTFail("Expected Excalidraw tile")
+            return
+        }
+        let initialController: ExcalidrawTileController? = service.niriAppController(
+            for: session.id,
+            itemID: itemID,
+            appID: NiriAppID.excalidraw,
+            as: ExcalidrawTileController.self
+        )
+        XCTAssertNotNil(initialController)
+
+        service.closeNiriFocusedItem(in: session.id)
+        let layout = service.niriLayout(for: session.id)
+        let stillExists = layout.workspaces
+            .flatMap(\.columns)
+            .flatMap(\.items)
+            .contains(where: { $0.id == itemID })
+
+        XCTAssertFalse(stillExists)
+        let removedController: ExcalidrawTileController? = service.niriAppController(
+            for: session.id,
+            itemID: itemID,
+            appID: NiriAppID.excalidraw,
+            as: ExcalidrawTileController.self
+        )
+        XCTAssertNil(removedController)
+        assertHasSingleTrailingEmptyWorkspace(layout)
+    }
+
+    func testCloseNiriFocusedOpenCodeTileRemovesItemControllerAndArtifacts() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Close OpenCode")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let openCodeItemID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.openCode) else {
+            XCTFail("Expected OpenCode tile")
+            return
+        }
+
+        let initialController: OpenCodeTileController? = service.niriAppController(
+            for: session.id,
+            itemID: openCodeItemID,
+            appID: NiriAppID.openCode,
+            as: OpenCodeTileController.self
+        )
+        XCTAssertNotNil(initialController)
+
+        let paths = OpenCodeRuntimePaths(sessionID: session.id)
+        try paths.ensureBaseDirectories()
+        let marker = paths.sessionDirectory.appendingPathComponent("marker.txt", isDirectory: false)
+        try "marker".write(to: marker, atomically: true, encoding: .utf8)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+
+        service.closeNiriFocusedItem(in: session.id)
+        let layout = service.niriLayout(for: session.id)
+        let stillExists = layout.workspaces
+            .flatMap(\.columns)
+            .flatMap(\.items)
+            .contains(where: { $0.id == openCodeItemID })
+        XCTAssertFalse(stillExists)
+
+        let removedController: OpenCodeTileController? = service.niriAppController(
+            for: session.id,
+            itemID: openCodeItemID,
+            appID: NiriAppID.openCode,
+            as: OpenCodeTileController.self
+        )
+        XCTAssertNil(removedController)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.sessionDirectory.path))
+        assertHasSingleTrailingEmptyWorkspace(layout)
+    }
+
+    func testCloseSessionWithOpenCodeCleansSessionArtifacts() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Close Session OpenCode")).session
+        service.ensureNiriLayoutState(for: session.id)
+        _ = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.openCode)
+
+        let paths = OpenCodeRuntimePaths(sessionID: session.id)
+        try paths.ensureBaseDirectories()
+        let marker = paths.sessionDirectory.appendingPathComponent("marker.txt", isDirectory: false)
+        try "marker".write(to: marker, atomically: true, encoding: .utf8)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+
+        service.closeSession(session.id)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.sessionDirectory.path))
+    }
     func testCloseNiriFocusedBrowserTileRemovesItem() async throws {
         let fixture = try Fixture()
         let service = fixture.service
@@ -537,6 +689,78 @@ extension SessionServiceTests {
         assertHasSingleTrailingEmptyWorkspace(updated)
     }
 
+    func testNiriMoveExcalidrawTileAcrossWorkspacesPreservesInvariants() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Move Excalidraw")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let itemID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw) else {
+            XCTFail("Expected Excalidraw tile")
+            return
+        }
+
+        service.focusNiriWorkspaceDown(sessionID: session.id)
+        _ = service.niriAddTerminalRight(in: session.id)
+        let layout = service.niriLayout(for: session.id)
+        guard let destinationWorkspaceID = layout.camera.activeWorkspaceID else {
+            XCTFail("Expected destination workspace")
+            return
+        }
+
+        service.moveNiriItemToWorkspace(
+            sessionID: session.id,
+            itemID: itemID,
+            toWorkspaceID: destinationWorkspaceID
+        )
+        let updated = service.niriLayout(for: session.id)
+        let destinationContainsItem = updated.workspaces
+            .first(where: { $0.id == destinationWorkspaceID })?
+            .columns
+            .flatMap(\.items)
+            .contains(where: { $0.id == itemID }) ?? false
+
+        XCTAssertTrue(destinationContainsItem)
+        XCTAssertEqual(updated.camera.focusedItemID, itemID)
+        assertHasSingleTrailingEmptyWorkspace(updated)
+    }
+
+    func testNiriMoveOpenCodeTileAcrossWorkspacesPreservesInvariants() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Move OpenCode")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let openCodeItemID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.openCode) else {
+            XCTFail("Expected OpenCode tile")
+            return
+        }
+
+        service.focusNiriWorkspaceDown(sessionID: session.id)
+        _ = service.niriAddTerminalRight(in: session.id)
+        let layout = service.niriLayout(for: session.id)
+        guard let destinationWorkspaceID = layout.camera.activeWorkspaceID else {
+            XCTFail("Expected destination workspace")
+            return
+        }
+
+        service.moveNiriItemToWorkspace(
+            sessionID: session.id,
+            itemID: openCodeItemID,
+            toWorkspaceID: destinationWorkspaceID
+        )
+        let updated = service.niriLayout(for: session.id)
+        let destinationContainsOpenCode = updated.workspaces
+            .first(where: { $0.id == destinationWorkspaceID })?
+            .columns
+            .flatMap(\.items)
+            .contains(where: { $0.id == openCodeItemID }) ?? false
+
+        XCTAssertTrue(destinationContainsOpenCode)
+        XCTAssertEqual(updated.camera.focusedItemID, openCodeItemID)
+        assertHasSingleTrailingEmptyWorkspace(updated)
+    }
+
     func testNiriTrailingEmptyWorkspaceInvariantWithMixedTileTypesIncludingVSCode() async throws {
         let fixture = try Fixture()
         let service = fixture.service
@@ -547,6 +771,8 @@ extension SessionServiceTests {
         _ = service.niriAddBrowserRight(in: session.id)
         _ = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.t3Code)
         _ = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.vscode)
+        _ = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw)
+        _ = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.openCode)
         _ = service.niriAddTerminalRight(in: session.id)
         service.focusNiriWorkspaceDown(sessionID: session.id)
         _ = service.niriAddTerminalRight(in: session.id)
@@ -582,6 +808,58 @@ extension SessionServiceTests {
         XCTAssertEqual(controller.webView.pageZoom, 0.9, accuracy: 0.0001)
     }
 
+    func testNiriFocusedExcalidrawTileRespondsToZoomAdjustments() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Excalidraw Zoom")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let itemID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.excalidraw),
+              let controller: ExcalidrawTileController = service.niriAppController(
+                for: session.id,
+                itemID: itemID,
+                appID: NiriAppID.excalidraw,
+                as: ExcalidrawTileController.self
+              )
+        else {
+            XCTFail("Expected Excalidraw tile and controller")
+            return
+        }
+
+        controller.webView.pageZoom = 1.0
+        XCTAssertTrue(service.adjustNiriFocusedWebTileZoom(for: session.id, delta: 0.1))
+        XCTAssertEqual(controller.webView.pageZoom, 1.1, accuracy: 0.0001)
+
+        XCTAssertTrue(service.adjustNiriFocusedWebTileZoom(for: session.id, delta: -0.2))
+        XCTAssertEqual(controller.webView.pageZoom, 0.9, accuracy: 0.0001)
+    }
+
+    func testNiriFocusedOpenCodeTileRespondsToZoomAdjustments() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri OpenCode Zoom")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let openCodeItemID = service.niriAddSingletonAppRight(in: session.id, appID: NiriAppID.openCode),
+              let controller: OpenCodeTileController = service.niriAppController(
+                for: session.id,
+                itemID: openCodeItemID,
+                appID: NiriAppID.openCode,
+                as: OpenCodeTileController.self
+              )
+        else {
+            XCTFail("Expected OpenCode tile and controller")
+            return
+        }
+
+        controller.webView.pageZoom = 1.0
+        XCTAssertTrue(service.adjustNiriFocusedWebTileZoom(for: session.id, delta: 0.1))
+        XCTAssertEqual(controller.webView.pageZoom, 1.1, accuracy: 0.0001)
+
+        XCTAssertTrue(service.adjustNiriFocusedWebTileZoom(for: session.id, delta: -0.2))
+        XCTAssertEqual(controller.webView.pageZoom, 0.9, accuracy: 0.0001)
+    }
+
     func testNiriZoomAdjustmentIgnoresFocusedTerminalTile() async throws {
         let fixture = try Fixture()
         let service = fixture.service
@@ -590,6 +868,102 @@ extension SessionServiceTests {
         service.ensureNiriLayoutState(for: session.id)
 
         XCTAssertFalse(service.adjustNiriFocusedWebTileZoom(for: session.id, delta: 0.1))
+    }
+
+    func testNiriFocusedTileZoomToggleTracksFocusedItem() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Focused Zoom Toggle")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let focusedItemID = service.niriLayout(for: session.id).camera.focusedItemID else {
+            XCTFail("Expected focused tile")
+            return
+        }
+
+        XCTAssertNil(service.niriFocusedTileZoomItemID(for: session.id))
+        XCTAssertTrue(service.toggleNiriFocusedTileZoom(sessionID: session.id))
+        XCTAssertEqual(service.niriFocusedTileZoomItemID(for: session.id), focusedItemID)
+        XCTAssertTrue(service.toggleNiriFocusedTileZoom(sessionID: session.id))
+        XCTAssertNil(service.niriFocusedTileZoomItemID(for: session.id))
+    }
+
+    func testNiriFocusedTileZoomClearsWhenZoomedItemIsRemoved() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Focused Zoom Clear")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let browserItemID = service.niriAddBrowserRight(in: session.id) else {
+            XCTFail("Expected browser tile")
+            return
+        }
+
+        XCTAssertTrue(service.toggleNiriFocusedTileZoom(sessionID: session.id))
+        XCTAssertEqual(service.niriFocusedTileZoomItemID(for: session.id), browserItemID)
+
+        service.closeNiriFocusedItem(in: session.id)
+
+        XCTAssertNil(service.niriFocusedTileZoomItemID(for: session.id))
+    }
+
+    func testNiriDefaultTileSizesApplyOnlyToNewTiles() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Default Tile Sizes")).session
+        service.ensureNiriLayoutState(for: session.id)
+
+        service.saveSettings { settings in
+            settings.niri.defaultNewColumnWidth = 900
+            settings.niri.defaultNewTileHeight = 520
+        }
+
+        guard let firstItemID = service.niriAddTerminalRight(in: session.id) else {
+            XCTFail("Expected first terminal tile")
+            return
+        }
+
+        var layout = service.niriLayout(for: session.id)
+        guard let firstPath = service.findNiriItemPath(layout: layout, itemID: firstItemID) else {
+            XCTFail("Expected path for first tile")
+            return
+        }
+        let firstWidth = try XCTUnwrap(layout.workspaces[firstPath.workspaceIndex].columns[firstPath.columnIndex].preferredWidth)
+        let firstHeight = try XCTUnwrap(layout.workspaces[firstPath.workspaceIndex].columns[firstPath.columnIndex].items[firstPath.itemIndex].preferredHeight)
+        XCTAssertEqual(firstWidth, 900, accuracy: 0.001)
+        XCTAssertEqual(firstHeight, 520, accuracy: 0.001)
+
+        service.saveSettings { settings in
+            settings.niri.defaultNewColumnWidth = 1100
+            settings.niri.defaultNewTileHeight = 640
+        }
+
+        guard let secondItemID = service.niriAddTaskBelow(in: session.id),
+              let thirdItemID = service.niriAddTerminalRight(in: session.id) else {
+            XCTFail("Expected additional terminal tiles")
+            return
+        }
+
+        layout = service.niriLayout(for: session.id)
+        guard let secondPath = service.findNiriItemPath(layout: layout, itemID: secondItemID),
+              let thirdPath = service.findNiriItemPath(layout: layout, itemID: thirdItemID)
+        else {
+            XCTFail("Expected paths for new tiles")
+            return
+        }
+
+        let unchangedFirstWidth = try XCTUnwrap(layout.workspaces[firstPath.workspaceIndex].columns[firstPath.columnIndex].preferredWidth)
+        let unchangedFirstHeight = try XCTUnwrap(layout.workspaces[firstPath.workspaceIndex].columns[firstPath.columnIndex].items[firstPath.itemIndex].preferredHeight)
+        let secondHeight = try XCTUnwrap(layout.workspaces[secondPath.workspaceIndex].columns[secondPath.columnIndex].items[secondPath.itemIndex].preferredHeight)
+        let thirdWidth = try XCTUnwrap(layout.workspaces[thirdPath.workspaceIndex].columns[thirdPath.columnIndex].preferredWidth)
+        let thirdHeight = try XCTUnwrap(layout.workspaces[thirdPath.workspaceIndex].columns[thirdPath.columnIndex].items[thirdPath.itemIndex].preferredHeight)
+
+        XCTAssertEqual(unchangedFirstWidth, 900, accuracy: 0.001)
+        XCTAssertEqual(unchangedFirstHeight, 520, accuracy: 0.001)
+        XCTAssertEqual(secondHeight, 640, accuracy: 0.001)
+        XCTAssertEqual(thirdWidth, 1100, accuracy: 0.001)
+        XCTAssertEqual(thirdHeight, 640, accuracy: 0.001)
     }
 
     func testNiriGenericAppSelectionEnsuresControllerViaDescriptorFactory() async throws {

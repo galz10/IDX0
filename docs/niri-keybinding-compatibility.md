@@ -20,10 +20,11 @@ Default `Mod` in idx0 is `Command+Option`.
 | Move column to workspace up | `Niri: Move Column To Workspace Up` | `⌘⌥⇧U`, `⌘⌥⇧PgUp` | unassigned | `⌘⌥⇧U`, `⌘⌥⇧PgUp` | exact | Exposed in command menu and shortcut settings. |
 | Move column to workspace down | `Niri: Move Column To Workspace Down` | `⌘⌥⇧I`, `⌘⌥⇧PgDn` | unassigned | `⌘⌥⇧I`, `⌘⌥⇧PgDn` | exact | Exposed in command menu and shortcut settings. |
 | Toggle overview | `Niri: Toggle Overview` | `⌘⌥O` | `⌘⌥O` | `⌘⌥O` | exact |  |
-| Toggle tabbed column display | `Niri: Toggle Column Tabbed Display` | `⌘⌥T` | `⌘⌥T` | `⌘⌥T` | exact |  |
-| Close focused tile/pane | `Close Pane / Tile` | `⌘⇧W` and `⌘⌥⇧Q` | `⌘⇧W` | `⌘⌥⇧Q` | adapted | macOS alias preserved for consistency. |
+| Toggle tabbed column display | `Niri: Toggle Column Tabbed Display` | `⌘⌥⇧T` | `⌘⌥⇧T` | `⌘⌥⇧T` | exact | Remapped from `⌘⌥T` to avoid conflict with new add-terminal binding. |
+| Toggle focused tile zoom | `Niri: Toggle Focused Tile Zoom` | `⌘⌥F` | `⌘⌥F` | `⌘⌥F` | adapted | Focused tile fills canvas viewport; `Esc` exits zoom mode. |
+| Close focused tile/pane | `Close Pane / Tile` | `⌘⇧W`, `⌘⌥W`, and `⌘⌥⇧Q` | `⌘⇧W` | `⌘⌥W` | adapted | Keeps legacy `⌘⌥⇧Q` alias while promoting `⌘⌥W` in Niri flows. |
 | Close focused session/window | `Close Session` | `⌘W` and `⌘⌥Q` | `⌘W` | `⌘⌥Q` | adapted | Uses session-close semantics in local monitor. |
-| Spawn terminal right | `Niri: Add Terminal Right` | `⌘⌥\` | `⌘⌥\` | `⌘⌥\` | exact |  |
+| Spawn terminal right | `Niri: Add Terminal Right` | `⌘⌥T` and `⌘⌥\` | `⌘⌥T` | `⌘⌥T` | exact | `⌘⌥\` remains as a legacy alias. |
 | Spawn task below | `Niri: Add Task Below` | `⌘⌥⇧\` | `⌘⌥⇧\` | `⌘⌥⇧\` | exact |  |
 | Spawn browser tile | `Niri: Add Browser Tile` | `⌘⌥B` | `⌘⌥B` | `⌘⌥B` | adapted | Browser tile is an idx0 addition. |
 | Zoom focused web tile in/out | `Zoom In/Out Focused Web Tile` | `⌘=` / `⌘-` and `⌘⌥=` / `⌘⌥-` | `⌘=` / `⌘-` | `⌘⌥=` / `⌘⌥-` | adapted | Applies to browser-like Niri tiles. |

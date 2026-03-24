@@ -3,11 +3,11 @@ import Darwin
 import Foundation
 import WebKit
 
-struct T3BuildManifest: Codable, Equatable {
-    static let canonicalRepositoryURL = "https://github.com/pingdotgg/t3code.git"
-    static let canonicalBuildCommand = "bun run --cwd apps/web build && bun run --cwd apps/server build"
-    static let canonicalEntrypoint = "apps/server/dist/index.mjs"
-    static let canonicalClientArtifact = "apps/server/dist/client/index.html"
+struct ExcalidrawBuildManifest: Codable, Equatable {
+    static let canonicalRepositoryURL = "https://github.com/excalidraw/excalidraw.git"
+    static let canonicalInstallCommand = "yarn install --frozen-lockfile"
+    static let canonicalBuildCommand = "yarn --cwd excalidraw-app build"
+    static let canonicalEntrypoint = "excalidraw-app/build/index.html"
 
     let repositoryURL: String
     let pinnedCommit: String
@@ -16,85 +16,37 @@ struct T3BuildManifest: Codable, Equatable {
     let entrypoint: String
     let requiredArtifacts: [String]
 
-    static let `default` = T3BuildManifest(
+    static let `default` = ExcalidrawBuildManifest(
         repositoryURL: canonicalRepositoryURL,
-        pinnedCommit: "2a237c20019a",
-        installCommand: "bun install --frozen-lockfile",
+        pinnedCommit: "d6f0f34fe91a7fab25106f2b31b074c132815d36",
+        installCommand: canonicalInstallCommand,
         buildCommand: canonicalBuildCommand,
         entrypoint: canonicalEntrypoint,
         requiredArtifacts: [
-            canonicalEntrypoint,
-            canonicalClientArtifact
+            canonicalEntrypoint
         ]
     )
 
-    static func loadFromBundle(_ bundle: Bundle = .main) -> T3BuildManifest {
-        guard let url = bundle.url(forResource: "t3-build-manifest", withExtension: "json"),
+    static func loadFromBundle(_ bundle: Bundle = .main) -> ExcalidrawBuildManifest {
+        guard let url = bundle.url(forResource: "excalidraw-build-manifest", withExtension: "json"),
               let data = try? Data(contentsOf: url),
-              let decoded = try? JSONDecoder().decode(T3BuildManifest.self, from: data)
+              let decoded = try? JSONDecoder().decode(ExcalidrawBuildManifest.self, from: data)
         else {
             return .default
         }
-        return decoded.normalized()
-    }
-
-    func normalized() -> T3BuildManifest {
-        var normalizedRepositoryURL = repositoryURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalizedRepositoryURL.contains("t3dotgg/t3.chat") {
-            normalizedRepositoryURL = Self.canonicalRepositoryURL
-        }
-
-        var normalizedBuildCommand = buildCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalizedBuildCommand == "bun run --cwd apps/server build" {
-            normalizedBuildCommand = Self.canonicalBuildCommand
-        }
-
-        var normalizedEntrypoint = entrypoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalizedEntrypoint == "apps/server/dist/index.cjs" {
-            normalizedEntrypoint = Self.canonicalEntrypoint
-        }
-
-        let oldEntrypoint = "apps/server/dist/index.cjs"
-        var normalizedRequiredArtifacts = requiredArtifacts.map { artifact in
-            let trimmed = artifact.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed == oldEntrypoint ? Self.canonicalEntrypoint : trimmed
-        }
-
-        if !normalizedRequiredArtifacts.contains(Self.canonicalEntrypoint) {
-            normalizedRequiredArtifacts.insert(Self.canonicalEntrypoint, at: 0)
-        }
-
-        if !normalizedRequiredArtifacts.contains(Self.canonicalClientArtifact) {
-            normalizedRequiredArtifacts.append(Self.canonicalClientArtifact)
-        }
-
-        if normalizedRepositoryURL == repositoryURL &&
-            normalizedBuildCommand == buildCommand &&
-            normalizedEntrypoint == entrypoint &&
-            normalizedRequiredArtifacts == requiredArtifacts {
-            return self
-        }
-
-        return T3BuildManifest(
-            repositoryURL: normalizedRepositoryURL,
-            pinnedCommit: pinnedCommit,
-            installCommand: installCommand,
-            buildCommand: normalizedBuildCommand,
-            entrypoint: normalizedEntrypoint,
-            requiredArtifacts: normalizedRequiredArtifacts
-        )
+        return decoded
     }
 }
 
-struct T3RuntimePaths {
+struct ExcalidrawRuntimePaths {
     let rootDirectory: URL
     let sourceDirectory: URL
     let buildRecordPath: URL
     let buildLogPath: URL
     let buildLockPath: URL
+    let originsRecordPath: URL
     let sessionsDirectory: URL
     let sessionDirectory: URL
-    let sessionStateDirectory: URL
     let runtimeLogPath: URL
 
     init(
@@ -110,17 +62,19 @@ struct T3RuntimePaths {
                 ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             idx0Root = appSupportRoot
                 .appendingPathComponent("idx0", isDirectory: true)
-                .appendingPathComponent("t3code", isDirectory: true)
+                .appendingPathComponent("excalidraw", isDirectory: true)
         }
 
         rootDirectory = idx0Root
         sourceDirectory = idx0Root.appendingPathComponent("source", isDirectory: true)
         buildRecordPath = idx0Root.appendingPathComponent("manifest.json", isDirectory: false)
-        buildLogPath = idx0Root.appendingPathComponent("logs", isDirectory: true).appendingPathComponent("build.log", isDirectory: false)
+        buildLogPath = idx0Root
+            .appendingPathComponent("logs", isDirectory: true)
+            .appendingPathComponent("build.log", isDirectory: false)
         buildLockPath = idx0Root.appendingPathComponent("build.lock", isDirectory: false)
+        originsRecordPath = idx0Root.appendingPathComponent("session-origins.json", isDirectory: false)
         sessionsDirectory = idx0Root.appendingPathComponent("sessions", isDirectory: true)
         sessionDirectory = sessionsDirectory.appendingPathComponent(sessionID.uuidString, isDirectory: true)
-        sessionStateDirectory = sessionDirectory.appendingPathComponent("state", isDirectory: true)
         runtimeLogPath = sessionDirectory.appendingPathComponent("runtime.log", isDirectory: false)
     }
 
@@ -131,9 +85,13 @@ struct T3RuntimePaths {
         try fileManager.createDirectory(at: sessionsDirectory, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
     }
+
+    func removeSessionArtifacts(fileManager: FileManager = .default) {
+        try? fileManager.removeItem(at: sessionDirectory)
+    }
 }
 
-enum T3TileRuntimeState: Equatable {
+enum ExcalidrawTileRuntimeState: Equatable {
     case idle
     case preparingSource
     case building
@@ -146,11 +104,11 @@ enum T3TileRuntimeState: Equatable {
         case .idle:
             return "Ready"
         case .preparingSource:
-            return "Preparing T3 Code source..."
+            return "Preparing Excalidraw source..."
         case .building:
-            return "Building T3 Code..."
+            return "Building Excalidraw..."
         case .starting:
-            return "Starting T3 Code..."
+            return "Starting Excalidraw..."
         case .live:
             return "Live"
         case .failed(let message, _):
@@ -159,7 +117,7 @@ enum T3TileRuntimeState: Equatable {
     }
 }
 
-enum T3RuntimeError: LocalizedError {
+enum ExcalidrawRuntimeError: LocalizedError {
     case missingTool(String)
     case commandFailed(command: String, code: Int32, stderr: String?)
     case missingArtifact(String)
@@ -179,36 +137,36 @@ enum T3RuntimeError: LocalizedError {
         case .missingArtifact(let artifact):
             return "Build artifact missing: \(artifact)"
         case .startupTimeout:
-            return "T3 Code did not become ready in time."
+            return "Excalidraw did not become ready in time."
         case .processExitedBeforeReady:
-            return "T3 Code process exited before it became ready."
+            return "Excalidraw process exited before it became ready."
         case .cancelled:
             return "Operation cancelled."
         }
     }
 }
 
-private struct T3BuildRecord: Codable {
+private struct ExcalidrawBuildRecord: Codable {
     let pinnedCommit: String
     let entrypoint: String
     let builtAt: Date
 }
 
 @MainActor
-final class T3BuildCoordinator {
-    private let processRunner: ProcessRunnerProtocol
+final class ExcalidrawBuildCoordinator {
+    private let processRunner: any ProcessRunnerProtocol
     private let fileManager: FileManager
     private var buildTask: Task<URL, Error>?
 
-    init(processRunner: ProcessRunnerProtocol = ProcessRunner(), fileManager: FileManager = .default) {
+    init(processRunner: any ProcessRunnerProtocol = ProcessRunner(), fileManager: FileManager = .default) {
         self.processRunner = processRunner
         self.fileManager = fileManager
     }
 
     func ensureBuilt(
-        manifest: T3BuildManifest,
-        paths: T3RuntimePaths,
-        onStateUpdate: ((T3TileRuntimeState) -> Void)? = nil
+        manifest: ExcalidrawBuildManifest,
+        paths: ExcalidrawRuntimePaths,
+        onStateUpdate: ((ExcalidrawTileRuntimeState) -> Void)? = nil
     ) async throws -> URL {
         if let entrypoint = try? reusableEntrypointIfAvailable(manifest: manifest, paths: paths) {
             return entrypoint
@@ -219,7 +177,7 @@ final class T3BuildCoordinator {
         }
 
         let task = Task { [weak self] () -> URL in
-            guard let self else { throw T3RuntimeError.cancelled }
+            guard let self else { throw ExcalidrawRuntimeError.cancelled }
             return try await self.performBuild(manifest: manifest, paths: paths, onStateUpdate: onStateUpdate)
         }
 
@@ -234,37 +192,37 @@ final class T3BuildCoordinator {
         }
     }
 
-    private func reusableEntrypointIfAvailable(manifest: T3BuildManifest, paths: T3RuntimePaths) throws -> URL {
+    private func reusableEntrypointIfAvailable(manifest: ExcalidrawBuildManifest, paths: ExcalidrawRuntimePaths) throws -> URL {
         guard fileManager.fileExists(atPath: paths.buildRecordPath.path) else {
-            throw T3RuntimeError.missingArtifact(paths.buildRecordPath.path)
+            throw ExcalidrawRuntimeError.missingArtifact(paths.buildRecordPath.path)
         }
 
         let data = try Data(contentsOf: paths.buildRecordPath)
-        let record = try JSONDecoder().decode(T3BuildRecord.self, from: data)
+        let record = try JSONDecoder().decode(ExcalidrawBuildRecord.self, from: data)
 
         guard record.pinnedCommit == manifest.pinnedCommit else {
-            throw T3RuntimeError.missingArtifact(manifest.pinnedCommit)
+            throw ExcalidrawRuntimeError.missingArtifact(manifest.pinnedCommit)
         }
 
         for artifact in manifest.requiredArtifacts {
             let artifactURL = paths.sourceDirectory.appendingPathComponent(artifact, isDirectory: false)
             guard fileManager.fileExists(atPath: artifactURL.path) else {
-                throw T3RuntimeError.missingArtifact(artifact)
+                throw ExcalidrawRuntimeError.missingArtifact(artifact)
             }
         }
 
         let entrypointURL = paths.sourceDirectory.appendingPathComponent(record.entrypoint, isDirectory: false)
         guard fileManager.fileExists(atPath: entrypointURL.path) else {
-            throw T3RuntimeError.missingArtifact(entrypointURL.path)
+            throw ExcalidrawRuntimeError.missingArtifact(entrypointURL.path)
         }
 
         return entrypointURL
     }
 
     private func performBuild(
-        manifest: T3BuildManifest,
-        paths: T3RuntimePaths,
-        onStateUpdate: ((T3TileRuntimeState) -> Void)?
+        manifest: ExcalidrawBuildManifest,
+        paths: ExcalidrawRuntimePaths,
+        onStateUpdate: ((ExcalidrawTileRuntimeState) -> Void)?
     ) async throws -> URL {
         try paths.ensureBaseDirectories(fileManager: fileManager)
 
@@ -278,14 +236,15 @@ final class T3BuildCoordinator {
         )
         defer { try? fileManager.removeItem(at: paths.buildLockPath) }
 
-        try await ensureToolAvailable("git", paths: paths)
-        try await ensureToolAvailable("node", paths: paths)
-        try await ensureToolAvailable("bun", paths: paths)
+        let resolvedGitPath = try await ensureToolAvailable("git", paths: paths)
+        let resolvedNodePath = try await ensureToolAvailable("node", paths: paths)
+        let resolvedYarnPath = try await ensureToolAvailable("yarn", paths: paths)
+        let preferredToolDirectories = uniqueParentDirectories(for: [resolvedGitPath, resolvedNodePath, resolvedYarnPath])
 
         if fileManager.fileExists(atPath: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true).path) {
             appendBuildLog(paths: paths, line: "Refreshing existing repository")
             try await runChecked(
-                executable: "/usr/bin/git",
+                executable: resolvedGitPath,
                 arguments: ["-C", paths.sourceDirectory.path, "fetch", "--all", "--tags"],
                 currentDirectory: paths.sourceDirectory.path,
                 paths: paths
@@ -293,7 +252,7 @@ final class T3BuildCoordinator {
         } else {
             appendBuildLog(paths: paths, line: "Cloning repository")
             try await runChecked(
-                executable: "/usr/bin/git",
+                executable: resolvedGitPath,
                 arguments: ["clone", manifest.repositoryURL, paths.sourceDirectory.path],
                 currentDirectory: paths.rootDirectory.path,
                 paths: paths
@@ -301,7 +260,7 @@ final class T3BuildCoordinator {
         }
 
         try await runChecked(
-            executable: "/usr/bin/git",
+            executable: resolvedGitPath,
             arguments: ["-C", paths.sourceDirectory.path, "checkout", manifest.pinnedCommit],
             currentDirectory: paths.sourceDirectory.path,
             paths: paths
@@ -309,42 +268,33 @@ final class T3BuildCoordinator {
 
         onStateUpdate?(.building)
 
+        let installCommand = nonInteractiveShellCommand(
+            manifest.installCommand,
+            preferredToolDirectories: preferredToolDirectories
+        )
         try await runChecked(
             executable: "/bin/zsh",
-            arguments: ["-ilc", manifest.installCommand],
+            arguments: ["-lc", installCommand],
             currentDirectory: paths.sourceDirectory.path,
             paths: paths
         )
 
+        let buildCommand = nonInteractiveShellCommand(
+            manifest.buildCommand,
+            preferredToolDirectories: preferredToolDirectories
+        )
         try await runChecked(
             executable: "/bin/zsh",
-            arguments: ["-ilc", manifest.buildCommand],
+            arguments: ["-lc", buildCommand],
             currentDirectory: paths.sourceDirectory.path,
             paths: paths
         )
 
-        var missingArtifacts = missingRequiredArtifacts(manifest: manifest, paths: paths)
-        if !missingArtifacts.isEmpty {
-            // Older manifests only built the server. If client artifacts are missing,
-            // run a canonical full build (web + server) before failing.
-            let needsClientBundle = missingArtifacts.contains("apps/server/dist/client/index.html")
-            if needsClientBundle {
-                appendBuildLog(paths: paths, line: "Client bundle missing after build; running canonical full build")
-                try await runChecked(
-                    executable: "/bin/zsh",
-                    arguments: ["-ilc", T3BuildManifest.canonicalBuildCommand],
-                    currentDirectory: paths.sourceDirectory.path,
-                    paths: paths
-                )
-                missingArtifacts = missingRequiredArtifacts(manifest: manifest, paths: paths)
-            }
+        if let firstMissingArtifact = missingRequiredArtifacts(manifest: manifest, paths: paths).first {
+            throw ExcalidrawRuntimeError.missingArtifact(firstMissingArtifact)
         }
 
-        if let firstMissingArtifact = missingArtifacts.first {
-            throw T3RuntimeError.missingArtifact(firstMissingArtifact)
-        }
-
-        let record = T3BuildRecord(
+        let record = ExcalidrawBuildRecord(
             pinnedCommit: manifest.pinnedCommit,
             entrypoint: manifest.entrypoint,
             builtAt: Date()
@@ -357,13 +307,13 @@ final class T3BuildCoordinator {
 
         let entrypointURL = paths.sourceDirectory.appendingPathComponent(manifest.entrypoint, isDirectory: false)
         guard fileManager.fileExists(atPath: entrypointURL.path) else {
-            throw T3RuntimeError.missingArtifact(manifest.entrypoint)
+            throw ExcalidrawRuntimeError.missingArtifact(manifest.entrypoint)
         }
 
         return entrypointURL
     }
 
-    private func ensureToolAvailable(_ tool: String, paths: T3RuntimePaths) async throws {
+    private func ensureToolAvailable(_ tool: String, paths: ExcalidrawRuntimePaths) async throws -> String {
         let probes: [(executable: String, arguments: [String], display: String)] = [
             ("/usr/bin/which", [tool], "which \(tool)"),
             ("/bin/zsh", ["-lc", "whence -p \(tool)"], "zsh -lc 'whence -p \(tool)'"),
@@ -388,11 +338,11 @@ final class T3BuildCoordinator {
             if result.exitCode == 0,
                let resolvedPath = firstExecutablePath(from: result.stdout) {
                 appendBuildLog(paths: paths, line: "Resolved \(tool) -> \(resolvedPath)")
-                return
+                return resolvedPath
             }
         }
 
-        throw T3RuntimeError.missingTool(tool)
+        throw ExcalidrawRuntimeError.missingTool(tool)
     }
 
     private func firstExecutablePath(from output: String) -> String? {
@@ -404,11 +354,47 @@ final class T3BuildCoordinator {
         return candidates.first(where: { $0.hasPrefix("/") })
     }
 
+    private func uniqueParentDirectories(for resolvedToolPaths: [String]) -> [String] {
+        var seen: Set<String> = []
+        var directories: [String] = []
+
+        for path in resolvedToolPaths {
+            let parentDirectory = URL(fileURLWithPath: path).deletingLastPathComponent().path
+            guard !parentDirectory.isEmpty, !seen.contains(parentDirectory) else { continue }
+            seen.insert(parentDirectory)
+            directories.append(parentDirectory)
+        }
+
+        return directories
+    }
+
+    private func nonInteractiveShellCommand(
+        _ command: String,
+        preferredToolDirectories: [String]
+    ) -> String {
+        var parts = [
+            "export CI=1",
+            "export COREPACK_ENABLE_DOWNLOAD_PROMPT=0"
+        ]
+
+        if !preferredToolDirectories.isEmpty {
+            let joinedDirectories = preferredToolDirectories.joined(separator: ":")
+            parts.append("export PATH='\(shellEscapeSingleQuoted(joinedDirectories))':\"$PATH\"")
+        }
+
+        parts.append(command)
+        return parts.joined(separator: "; ")
+    }
+
+    private func shellEscapeSingleQuoted(_ value: String) -> String {
+        value.replacingOccurrences(of: "'", with: "'\\''")
+    }
+
     private func runChecked(
         executable: String,
         arguments: [String],
         currentDirectory: String?,
-        paths: T3RuntimePaths
+        paths: ExcalidrawRuntimePaths
     ) async throws {
         let command = ([executable] + arguments).joined(separator: " ")
         appendBuildLog(paths: paths, line: "$ \(command)")
@@ -427,7 +413,7 @@ final class T3BuildCoordinator {
         }
 
         guard result.exitCode == 0 else {
-            throw T3RuntimeError.commandFailed(
+            throw ExcalidrawRuntimeError.commandFailed(
                 command: command,
                 code: result.exitCode,
                 stderr: result.stderr.isEmpty ? nil : result.stderr
@@ -435,7 +421,7 @@ final class T3BuildCoordinator {
         }
     }
 
-    private func appendBuildLog(paths: T3RuntimePaths, line: String) {
+    private func appendBuildLog(paths: ExcalidrawRuntimePaths, line: String) {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let logLine = "[\(timestamp)] \(line)\n"
 
@@ -453,11 +439,11 @@ final class T3BuildCoordinator {
                 try handle.write(contentsOf: data)
             }
         } catch {
-            Logger.error("Failed to append T3 build log: \(error.localizedDescription)")
+            Logger.error("Failed to append Excalidraw build log: \(error.localizedDescription)")
         }
     }
 
-    private func missingRequiredArtifacts(manifest: T3BuildManifest, paths: T3RuntimePaths) -> [String] {
+    private func missingRequiredArtifacts(manifest: ExcalidrawBuildManifest, paths: ExcalidrawRuntimePaths) -> [String] {
         manifest.requiredArtifacts.filter { artifact in
             let artifactURL = paths.sourceDirectory.appendingPathComponent(artifact, isDirectory: false)
             return !fileManager.fileExists(atPath: artifactURL.path)
@@ -465,100 +451,110 @@ final class T3BuildCoordinator {
     }
 }
 
+private struct ExcalidrawSessionOriginRecord: Codable {
+    var portsBySessionID: [String: Int] = [:]
+}
+
 @MainActor
-final class T3StateSnapshotManager {
+final class ExcalidrawSessionOriginStore {
+    private let recordURL: URL
     private let fileManager: FileManager
-    private let skippedSnapshotEntries: Set<String> = [
-        "logs",
-        "state.sqlite-shm",
-        "state.sqlite-wal"
-    ]
+    private let portBase: Int
+    private let portSpan: Int
 
-    init(fileManager: FileManager = .default) {
+    init(
+        recordURL: URL,
+        fileManager: FileManager = .default,
+        portBase: Int = 46_000,
+        portSpan: Int = 10_000
+    ) {
+        self.recordURL = recordURL
         self.fileManager = fileManager
+        self.portBase = portBase
+        self.portSpan = max(256, portSpan)
     }
 
-    func prepareSessionSnapshot(paths: T3RuntimePaths) throws -> URL {
-        try paths.ensureBaseDirectories(fileManager: fileManager)
-
-        if fileManager.fileExists(atPath: paths.sessionStateDirectory.path) {
-            pruneTransientSnapshotArtifacts(in: paths.sessionStateDirectory)
-            return paths.sessionStateDirectory
+    func preferredPort(for sessionID: UUID) -> Int {
+        let record = loadRecord()
+        if let existing = record.portsBySessionID[sessionID.uuidString], isValidPort(existing) {
+            return existing
         }
-
-        let baseStatePath = NSString(string: "~/.t3/userdata").expandingTildeInPath
-        let baseStateURL = URL(fileURLWithPath: baseStatePath, isDirectory: true)
-
-        if fileManager.fileExists(atPath: baseStateURL.path) {
-            try copyDirectoryContents(from: baseStateURL, to: paths.sessionStateDirectory)
-        } else {
-            try fileManager.createDirectory(at: paths.sessionStateDirectory, withIntermediateDirectories: true)
-        }
-
-        pruneTransientSnapshotArtifacts(in: paths.sessionStateDirectory)
-
-        return paths.sessionStateDirectory
+        return deterministicPort(for: sessionID)
     }
 
-    func removeSessionSnapshot(paths: T3RuntimePaths) {
-        try? fileManager.removeItem(at: paths.sessionDirectory)
+    func persistPort(_ port: Int, for sessionID: UUID) {
+        guard isValidPort(port) else { return }
+        var record = loadRecord()
+        record.portsBySessionID[sessionID.uuidString] = port
+        saveRecord(record)
     }
 
-    private func copyDirectoryContents(from source: URL, to destination: URL) throws {
-        if fileManager.fileExists(atPath: destination.path) {
-            try fileManager.removeItem(at: destination)
+    func removePort(for sessionID: UUID) {
+        var record = loadRecord()
+        record.portsBySessionID.removeValue(forKey: sessionID.uuidString)
+        saveRecord(record)
+    }
+
+    private func loadRecord() -> ExcalidrawSessionOriginRecord {
+        guard fileManager.fileExists(atPath: recordURL.path),
+              let data = try? Data(contentsOf: recordURL),
+              let decoded = try? JSONDecoder().decode(ExcalidrawSessionOriginRecord.self, from: data)
+        else {
+            return ExcalidrawSessionOriginRecord()
         }
+        return decoded
+    }
 
-        try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
-        let contents = try fileManager.contentsOfDirectory(
-            at: source,
-            includingPropertiesForKeys: nil,
-            options: []
-        )
-
-        for item in contents where !skippedSnapshotEntries.contains(item.lastPathComponent) {
-            var isDirectory: ObjCBool = false
-            fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory)
-            let destinationItem = destination.appendingPathComponent(
-                item.lastPathComponent,
-                isDirectory: isDirectory.boolValue
-            )
-            try fileManager.copyItem(at: item, to: destinationItem)
+    private func saveRecord(_ record: ExcalidrawSessionOriginRecord) {
+        do {
+            try fileManager.createDirectory(at: recordURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(record)
+            try data.write(to: recordURL, options: .atomic)
+        } catch {
+            Logger.error("Failed to persist Excalidraw session origin record: \(error.localizedDescription)")
         }
     }
 
-    private func pruneTransientSnapshotArtifacts(in stateDirectory: URL) {
-        let logsDirectory = stateDirectory.appendingPathComponent("logs", isDirectory: true)
-        if fileManager.fileExists(atPath: logsDirectory.path) {
-            try? fileManager.removeItem(at: logsDirectory)
-        }
+    private func deterministicPort(for sessionID: UUID) -> Int {
+        let hash = fnv1a64(sessionID.uuidString)
+        return portBase + Int(hash % UInt64(portSpan))
+    }
 
-        for transientFilename in ["state.sqlite-shm", "state.sqlite-wal"] {
-            let transientURL = stateDirectory.appendingPathComponent(transientFilename, isDirectory: false)
-            if fileManager.fileExists(atPath: transientURL.path) {
-                try? fileManager.removeItem(at: transientURL)
-            }
+    private func fnv1a64(_ value: String) -> UInt64 {
+        let prime: UInt64 = 1_099_511_628_211
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= prime
         }
+        return hash
+    }
+
+    private func isValidPort(_ port: Int) -> Bool {
+        (1025...65535).contains(port)
     }
 }
 
 @MainActor
-final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
-    @Published private(set) var state: T3TileRuntimeState = .idle
+final class ExcalidrawTileController: ObservableObject, NiriAppTileRuntimeControlling {
+    @Published private(set) var state: ExcalidrawTileRuntimeState = .idle
 
     let sessionID: UUID
     let itemID: UUID
     let webView: WKWebView
 
     private let launchDirectoryProvider: () -> String?
-    private let buildCoordinator: T3BuildCoordinator
-    private let snapshotManager: T3StateSnapshotManager
-    private let manifestProvider: () -> T3BuildManifest
-    private let paths: T3RuntimePaths
+    private let buildCoordinator: ExcalidrawBuildCoordinator
+    private let originStore: ExcalidrawSessionOriginStore
+    private let manifestProvider: () -> ExcalidrawBuildManifest
+    private let paths: ExcalidrawRuntimePaths
 
     private let readinessIntervalNanoseconds: UInt64 = 250_000_000
     private let readinessTimeoutSeconds: TimeInterval = 20
     private let maxAutomaticRestarts = 3
+    private let defaultZoom: CGFloat = 1.0
     private let minimumZoom: CGFloat = 0.5
     private let maximumZoom: CGFloat = 3.0
 
@@ -574,22 +570,24 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         sessionID: UUID,
         itemID: UUID,
         launchDirectoryProvider: @escaping () -> String?,
-        buildCoordinator: T3BuildCoordinator,
-        snapshotManager: T3StateSnapshotManager,
-        manifestProvider: @escaping () -> T3BuildManifest = { T3BuildManifest.loadFromBundle() }
+        buildCoordinator: ExcalidrawBuildCoordinator,
+        originStore: ExcalidrawSessionOriginStore? = nil,
+        manifestProvider: @escaping () -> ExcalidrawBuildManifest = { ExcalidrawBuildManifest.loadFromBundle() },
+        rootDirectoryOverride: URL? = nil
     ) {
         self.sessionID = sessionID
         self.itemID = itemID
         self.launchDirectoryProvider = launchDirectoryProvider
         self.buildCoordinator = buildCoordinator
-        self.snapshotManager = snapshotManager
+        self.paths = ExcalidrawRuntimePaths(sessionID: sessionID, rootDirectoryOverride: rootDirectoryOverride)
+        self.originStore = originStore ?? ExcalidrawSessionOriginStore(recordURL: paths.originsRecordPath)
         self.manifestProvider = manifestProvider
-        self.paths = T3RuntimePaths(sessionID: sessionID)
 
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
         webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.pageZoom = defaultZoom
     }
 
     func ensureStarted() {
@@ -625,7 +623,14 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
     }
 
     func openLogsInFinder() {
-        let url = paths.runtimeLogPath
+        let url: URL
+        if case .failed(_, let logPath) = state,
+           let logPath,
+           !logPath.isEmpty {
+            url = URL(fileURLWithPath: logPath, isDirectory: false)
+        } else {
+            url = paths.runtimeLogPath
+        }
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
@@ -676,7 +681,7 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         }
     }
 
-    private func startupAttempt(manifest: T3BuildManifest) async throws {
+    private func startupAttempt(manifest: ExcalidrawBuildManifest) async throws {
         try paths.ensureBaseDirectories()
 
         let entrypointURL = try await buildCoordinator.ensureBuilt(manifest: manifest, paths: paths) { [weak self] newState in
@@ -684,72 +689,80 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         }
 
         if userStopped || Task.isCancelled {
-            throw T3RuntimeError.cancelled
+            throw ExcalidrawRuntimeError.cancelled
         }
 
-        let stateDirectory = try snapshotManager.prepareSessionSnapshot(paths: paths)
-        let port = try reserveLoopbackPort()
-        let launchEntrypointURL = resolveLaunchEntrypoint(from: entrypointURL)
+        let preferredPort = originStore.preferredPort(for: sessionID)
+        let port = try reserveLoopbackPort(preferredPort: preferredPort)
+        originStore.persistPort(port, for: sessionID)
 
         state = .starting
+
+        let webRootURL = entrypointURL.deletingLastPathComponent()
         try launchProcess(
-            entrypointURL: launchEntrypointURL,
+            webRootURL: webRootURL,
             port: port,
-            stateDirectory: stateDirectory,
-            workingDirectory: launchDirectoryProvider() ?? FileManager.default.homeDirectoryForCurrentUser.path
+            launchDirectory: launchDirectoryProvider() ?? FileManager.default.homeDirectoryForCurrentUser.path
         )
 
         let ready = await waitForServerReady(port: port)
         guard ready else {
+            let exitedBeforeReady = (process?.isRunning == false)
             terminateProcess()
             if userStopped || Task.isCancelled {
-                throw T3RuntimeError.cancelled
+                throw ExcalidrawRuntimeError.cancelled
             }
-            if process?.isRunning == false {
-                throw T3RuntimeError.processExitedBeforeReady
+            if exitedBeforeReady {
+                throw ExcalidrawRuntimeError.processExitedBeforeReady
             }
-            throw T3RuntimeError.startupTimeout
+            throw ExcalidrawRuntimeError.startupTimeout
         }
 
         if userStopped || Task.isCancelled {
             terminateProcess()
-            throw T3RuntimeError.cancelled
+            throw ExcalidrawRuntimeError.cancelled
         }
 
-        let url = URL(string: "http://127.0.0.1:\(port)")!
+        let url = URL(string: "http://127.0.0.1:\(port)/")!
         webView.load(URLRequest(url: url))
         state = .live(urlString: url.absoluteString)
         appendRuntimeLog("runtime live at \(url.absoluteString)")
     }
 
-    private func resolveLaunchEntrypoint(from entrypointURL: URL) -> URL {
-        guard entrypointURL.pathExtension == "cjs" else {
-            return entrypointURL
+    private func reserveLoopbackPort(preferredPort: Int) throws -> Int {
+        if let reserved = try reserveSpecificLoopbackPort(preferredPort) {
+            return reserved
         }
 
-        let mjsEntrypointURL = entrypointURL
-            .deletingPathExtension()
-            .appendingPathExtension("mjs")
-
-        guard FileManager.default.fileExists(atPath: mjsEntrypointURL.path) else {
-            return entrypointURL
+        for offset in 1...32 {
+            if let candidate = try reserveSpecificLoopbackPort(preferredPort + offset) {
+                return candidate
+            }
+            if let candidate = try reserveSpecificLoopbackPort(preferredPort - offset) {
+                return candidate
+            }
         }
 
-        appendRuntimeLog("using ESM entrypoint fallback: \(mjsEntrypointURL.path)")
-        return mjsEntrypointURL
+        if let fallback = try reserveSpecificLoopbackPort(0) {
+            return fallback
+        }
+
+        throw ExcalidrawRuntimeError.startupTimeout
     }
 
-    private func reserveLoopbackPort() throws -> Int {
-        let socketFD = socket(AF_INET, SOCK_STREAM, 0)
-        guard socketFD >= 0 else {
-            throw T3RuntimeError.startupTimeout
+    private func reserveSpecificLoopbackPort(_ requestedPort: Int) throws -> Int? {
+        guard requestedPort == 0 || (1025...65535).contains(requestedPort) else {
+            return nil
         }
+
+        let socketFD = socket(AF_INET, SOCK_STREAM, 0)
+        guard socketFD >= 0 else { return nil }
         defer { close(socketFD) }
 
         var address = sockaddr_in()
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = in_port_t(0).bigEndian
+        address.sin_port = in_port_t(requestedPort).bigEndian
         address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
 
         let bindResult = withUnsafePointer(to: &address) {
@@ -759,7 +772,7 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         }
 
         guard bindResult == 0 else {
-            throw T3RuntimeError.startupTimeout
+            return nil
         }
 
         var assignedAddress = sockaddr_in()
@@ -772,17 +785,16 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         }
 
         guard nameResult == 0 else {
-            throw T3RuntimeError.startupTimeout
+            throw ExcalidrawRuntimeError.startupTimeout
         }
 
         return Int(UInt16(bigEndian: assignedAddress.sin_port))
     }
 
     private func launchProcess(
-        entrypointURL: URL,
+        webRootURL: URL,
         port: Int,
-        stateDirectory: URL,
-        workingDirectory: String
+        launchDirectory: String
     ) throws {
         terminateProcess()
 
@@ -796,60 +808,25 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         logHandle = handle
 
         let process = Process()
-        process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory, isDirectory: true)
 
-        let runtimeArguments = [
-            entrypointURL.path,
-            "--mode", "web",
-            "--host", "127.0.0.1",
-            "--port", String(port),
-            "--state-dir", stateDirectory.path,
-            "--no-browser",
-            "--auto-bootstrap-project-from-cwd"
-        ]
-
-        var runtimePathDirectories: [String] = []
-        if let nodeExecutable = resolveRuntimeExecutablePath("node") {
-            process.executableURL = URL(fileURLWithPath: nodeExecutable)
-            process.arguments = runtimeArguments
-            appendRuntimeLog("resolved node executable: \(nodeExecutable)")
-            runtimePathDirectories.append(
-                URL(fileURLWithPath: nodeExecutable, isDirectory: false)
-                    .deletingLastPathComponent()
-                    .path
-            )
+        if let pythonPath = resolveRuntimeExecutablePath("python3") {
+            process.executableURL = URL(fileURLWithPath: pythonPath)
+            process.arguments = ["-m", "http.server", String(port), "--bind", "127.0.0.1"]
+            appendRuntimeLog("resolved python executable: \(pythonPath)")
+        } else if FileManager.default.isExecutableFile(atPath: "/usr/bin/python3") {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+            process.arguments = ["-m", "http.server", String(port), "--bind", "127.0.0.1"]
+            appendRuntimeLog("python resolution fallback: using /usr/bin/python3")
         } else {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["node"] + runtimeArguments
-            appendRuntimeLog("node resolution fallback: using /usr/bin/env node")
+            process.arguments = ["python3", "-m", "http.server", String(port), "--bind", "127.0.0.1"]
+            appendRuntimeLog("python resolution fallback: using /usr/bin/env python3")
         }
 
-        if let codexExecutable = resolveRuntimeExecutablePath("codex") {
-            appendRuntimeLog("resolved codex executable: \(codexExecutable)")
-            runtimePathDirectories.append(
-                URL(fileURLWithPath: codexExecutable, isDirectory: false)
-                    .deletingLastPathComponent()
-                    .path
-            )
-        } else {
-            appendRuntimeLog("codex executable not resolved during launch; relying on inherited PATH")
-        }
+        process.currentDirectoryURL = webRootURL
 
         var env = ProcessInfo.processInfo.environment
-        env["T3CODE_MODE"] = "web"
-        env["T3CODE_HOST"] = "127.0.0.1"
-        env["T3CODE_PORT"] = String(port)
-        env["T3CODE_STATE_DIR"] = stateDirectory.path
-        env["T3CODE_NO_BROWSER"] = "1"
-        if !runtimePathDirectories.isEmpty {
-            env["PATH"] = mergedPath(prepending: runtimePathDirectories, existingPath: env["PATH"])
-        }
-
-        if let isolatedZdotDir = prepareIsolatedZdotDir() {
-            env["ZDOTDIR"] = isolatedZdotDir.path
-            appendRuntimeLog("using isolated ZDOTDIR: \(isolatedZdotDir.path)")
-        }
-
+        env["PWD"] = launchDirectory
         process.environment = env
 
         let stdout = Pipe()
@@ -942,44 +919,6 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         return nil
     }
 
-    private func mergedPath(prepending directories: [String], existingPath: String?) -> String {
-        var combined: [String] = directories
-        if let existingPath {
-            combined.append(contentsOf: existingPath.split(separator: ":").map(String.init))
-        }
-
-        var seen: Set<String> = []
-        var unique: [String] = []
-        for directory in combined {
-            guard !directory.isEmpty else { continue }
-            if seen.insert(directory).inserted {
-                unique.append(directory)
-            }
-        }
-        return unique.joined(separator: ":")
-    }
-
-    private func prepareIsolatedZdotDir() -> URL? {
-        let zdotDir = paths.sessionDirectory.appendingPathComponent("codex-zdotdir", isDirectory: true)
-
-        do {
-            try FileManager.default.createDirectory(at: zdotDir, withIntermediateDirectories: true)
-
-            // Keep login/non-login shells quiet and deterministic for Codex shell snapshots.
-            for filename in [".zshenv", ".zprofile", ".zshrc", ".zlogin"] {
-                let fileURL = zdotDir.appendingPathComponent(filename, isDirectory: false)
-                if !FileManager.default.fileExists(atPath: fileURL.path) {
-                    try "".write(to: fileURL, atomically: true, encoding: .utf8)
-                }
-            }
-
-            return zdotDir
-        } catch {
-            appendRuntimeLog("failed to prepare isolated ZDOTDIR: \(error.localizedDescription)")
-            return nil
-        }
-    }
-
     private func waitForServerReady(port: Int) async -> Bool {
         let url = URL(string: "http://127.0.0.1:\(port)/")!
         let deadline = Date().addingTimeInterval(readinessTimeoutSeconds)
@@ -1061,7 +1000,7 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
             try logHandle.seekToEnd()
             try logHandle.write(contentsOf: data)
         } catch {
-            Logger.error("Failed writing T3 runtime log data: \(error.localizedDescription)")
+            Logger.error("Failed writing Excalidraw runtime log data: \(error.localizedDescription)")
         }
     }
 
@@ -1079,7 +1018,7 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
                 try handle.seekToEnd()
                 logHandle = handle
             } catch {
-                Logger.error("Failed opening T3 runtime log: \(error.localizedDescription)")
+                Logger.error("Failed opening Excalidraw runtime log: \(error.localizedDescription)")
                 return
             }
         }
@@ -1088,7 +1027,7 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
     }
 
     private func isRetryableStartupError(_ error: Error) -> Bool {
-        guard let runtimeError = error as? T3RuntimeError else {
+        guard let runtimeError = error as? ExcalidrawRuntimeError else {
             return false
         }
         switch runtimeError {
@@ -1100,7 +1039,7 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
     }
 
     private func logPathForError(_ error: Error) -> String {
-        guard let runtimeError = error as? T3RuntimeError else {
+        guard let runtimeError = error as? ExcalidrawRuntimeError else {
             return paths.runtimeLogPath.path
         }
         switch runtimeError {

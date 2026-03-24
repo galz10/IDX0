@@ -130,18 +130,27 @@ struct CommandPaletteOverlay: View {
     @ViewBuilder
     private func paletteRow(action: PaletteAction, isSelected: Bool) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: action.icon)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(
-                    !action.isEnabled ? tc.mutedText :
-                    isSelected ? tc.accent : tc.secondaryText
-                )
-                .frame(width: 24, height: 24)
-                .background(
-                    !action.isEnabled ? tc.surface0 :
-                    isSelected ? tc.accent.opacity(0.1) : tc.surface1,
-                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                )
+            Group {
+                if let imageName = action.iconImageName {
+                    Image(imageName)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 13, height: 13)
+                } else {
+                    Image(systemName: action.icon)
+                        .font(.system(size: 11, weight: .medium))
+                }
+            }
+            .foregroundStyle(
+                !action.isEnabled ? tc.mutedText :
+                isSelected ? tc.accent : tc.secondaryText
+            )
+            .frame(width: 24, height: 24)
+            .background(
+                !action.isEnabled ? tc.surface0 :
+                isSelected ? tc.accent.opacity(0.1) : tc.surface1,
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            )
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(highlightedTitle(action.title))
@@ -343,6 +352,13 @@ struct CommandPaletteOverlay: View {
                     run: { _ = coordinator.performCommand(.niriToggleColumnTabbedDisplay) }
                 ),
                 PaletteAction(
+                    id: "niri-focused-zoom", icon: "arrow.up.left.and.arrow.down.right", title: "Niri: Toggle Focused Tile Zoom",
+                    detail: "Make the focused tile fill the canvas viewport",
+                    shortcut: shortcutLabel(.niriToggleFocusedTileZoom), searchText: "niri focused tile zoom fullscreen max",
+                    isEnabled: selectedID != nil,
+                    run: { _ = coordinator.performCommand(.niriToggleFocusedTileZoom) }
+                ),
+                PaletteAction(
                     id: "niri-snap", icon: "dot.scope", title: "Niri: Toggle Snap",
                     detail: sessionService.settings.niri.snapEnabled ? "Disable snap and keep free-pan release" : "Enable velocity-based snap",
                     shortcut: shortcutLabel(.niriToggleSnap), searchText: "niri snap soft snap free pan velocity",
@@ -386,6 +402,7 @@ struct CommandPaletteOverlay: View {
                     PaletteAction(
                         id: "niri-add-app-\(app.id)",
                         icon: app.icon,
+                        iconImageName: app.iconImageName,
                         title: "Niri: Add \(app.displayName) Tile",
                         detail: app.menuSubtitle,
                         searchText: "niri add app \(app.displayName.lowercased()) \(app.id)",
@@ -488,6 +505,7 @@ struct CommandPaletteOverlay: View {
 struct PaletteAction: Identifiable {
     let id: String
     let icon: String
+    var iconImageName: String? = nil
     let title: String
     let detail: String
     var shortcut: String? = nil
