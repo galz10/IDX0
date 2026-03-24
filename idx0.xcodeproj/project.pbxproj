@@ -18,6 +18,8 @@
 		0A82A6B83B1252493812FBE4 /* NiriOnboardingGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 922E70866C06A866A454B057 /* NiriOnboardingGateTests.swift */; };
 		0AAB60544A1674A37048A3BB /* GhosttyTerminalSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CDE1C5DA7C67BFB9E74E578 /* GhosttyTerminalSurface.swift */; };
 		0ABF7787B802889756B0D2A1 /* InlineAdvancedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12978EF6AC1D54BA282486F1 /* InlineAdvancedSettings.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* OpenCodeRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F60718293A4B5C6D7E /* OpenCodeRuntime.swift */; };
+		B2C3D4E5F60718293A4B5C6D /* OpenCodeRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F60718293A4B5C6D7E8F /* OpenCodeRuntimeTests.swift */; };
 		0CBD7B3254B4240D37865331 /* SessionSettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 714F5099FB5B255B533B9993 /* SessionSettingsTab.swift */; };
 		0DB0C74997CFC15B9535105D /* SessionCreationResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5C9A58C93C0BA47A57C70B5 /* SessionCreationResult.swift */; };
 		0FB090602494B2B0F0F4823B /* terminal-themes.json in Resources */ = {isa = PBXBuildFile; fileRef = 57FC8B1654F989A31FC64476 /* terminal-themes.json */; };
@@ -215,6 +217,8 @@
 		1F14A30AD385DAFB54FC4455 /* idx0Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = idx0Tests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1F79E05AB6D634F53DE988F5 /* T3CodeRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = T3CodeRuntimeTests.swift; sourceTree = "<group>"; };
 		1F7FCA5B2CB17DD2E1C5B0EE /* VSCodeRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeRuntimeTests.swift; sourceTree = "<group>"; };
+		C3D4E5F60718293A4B5C6D7E /* OpenCodeRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeRuntime.swift; sourceTree = "<group>"; };
+		D4E5F60718293A4B5C6D7E8F /* OpenCodeRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenCodeRuntimeTests.swift; sourceTree = "<group>"; };
 		1FAA48CE62DBA9F6416478A8 /* BranchNameGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BranchNameGenerator.swift; sourceTree = "<group>"; };
 		207837FF9E845CF7CF878E93 /* ShortcutCommandDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCommandDispatcher.swift; sourceTree = "<group>"; };
 		222303CE45BB8A9C50FAD2C4 /* WorkflowCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowCard.swift; sourceTree = "<group>"; };
@@ -393,6 +397,14 @@
 			path = VSCode;
 			sourceTree = "<group>";
 		};
+		F60718293A4B5C6D7E8F9012 /* OpenCode */ = {
+			isa = PBXGroup;
+			children = (
+				D4E5F60718293A4B5C6D7E8F /* OpenCodeRuntimeTests.swift */,
+			);
+			path = OpenCode;
+			sourceTree = "<group>";
+		};
 		14832EBBB7937521D97894B7 /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -509,6 +521,7 @@
 			children = (
 				F10EF007191D14CF7D249BA4 /* T3Code */,
 				1194C0592BDF22BD406C09A1 /* VSCode */,
+				F60718293A4B5C6D7E8F9012 /* OpenCode */,
 			);
 			path = Apps;
 			sourceTree = "<group>";
@@ -532,6 +545,14 @@
 				A4CE738D0D42BB63C71A00FE /* VSCodeRuntime.swift */,
 			);
 			path = VSCode;
+			sourceTree = "<group>";
+		};
+		E5F60718293A4B5C6D7E8F90 /* OpenCode */ = {
+			isa = PBXGroup;
+			children = (
+				C3D4E5F60718293A4B5C6D7E /* OpenCodeRuntime.swift */,
+			);
+			path = OpenCode;
 			sourceTree = "<group>";
 		};
 		62A63927E1863A15DE054425 /* Browser */ = {
@@ -780,6 +801,7 @@
 				EBBA45F552AB22BE4D13D991 /* Core */,
 				0848A2A746C74F4F4070941D /* T3Code */,
 				621B3AF26F6F5F6CF82AF166 /* VSCode */,
+				E5F60718293A4B5C6D7E8F90 /* OpenCode */,
 			);
 			path = Apps;
 			sourceTree = "<group>";
@@ -995,6 +1017,7 @@
 				E72847AEEF99AC4FF921A86E /* ShortcutRegistryTests.swift in Sources */,
 				AFE3451E6F9A754B645F9435 /* SupervisionQueueServiceTests.swift in Sources */,
 				58987615D32B830F852135E5 /* T3CodeRuntimeTests.swift in Sources */,
+				B2C3D4E5F60718293A4B5C6D /* OpenCodeRuntimeTests.swift in Sources */,
 				036A444E148F29E56A156F65 /* TerminalThemeTests.swift in Sources */,
 				6D5F242BF42126B4C201A625 /* VSCodeRuntimeTests.swift in Sources */,
 				E2B377CCEA8EC06AC24CFDE8 /* WorkflowModelsTests.swift in Sources */,
@@ -1117,6 +1140,7 @@
 				8EBD5438089ADC23B4BB26F1 /* SidebarResizeHandle.swift in Sources */,
 				860E1AE5892CF200352256FC /* SupervisionQueueService.swift in Sources */,
 				C4BF4ED638BB64C3380B9C1F /* T3CodeRuntime.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* OpenCodeRuntime.swift in Sources */,
 				893B94051D5F59B2413D91BC /* TabBarOverlay.swift in Sources */,
 				64447C377FF57F3FD4ED4CC9 /* TerminalMonitorService.swift in Sources */,
 				63CB95EF0E4145A598612B03 /* TerminalSessionController.swift in Sources */,

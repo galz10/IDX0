@@ -1,0 +1,105 @@
+import Foundation
+import XCTest
+@testable import idx0
+
+@MainActor
+final class OpenCodeRuntimeTests: XCTestCase {
+    func testPrepareSessionStateCreatesXDGDirectories() throws {
+        let root = temporaryOpenCodeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let sessionID = UUID()
+        let paths = OpenCodeRuntimePaths(sessionID: sessionID, rootDirectoryOverride: root)
+        let manager = OpenCodeStateSnapshotManager()
+
+        let state = try manager.prepareSessionState(paths: paths)
+        var isDirectory: ObjCBool = false
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: state.xdgConfigHome.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: state.xdgDataHome.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: state.xdgCacheHome.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: state.xdgStateHome.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue)
+
+        XCTAssertEqual(state.environmentOverrides["XDG_CONFIG_HOME"], state.xdgConfigHome.path)
+        XCTAssertEqual(state.environmentOverrides["XDG_DATA_HOME"], state.xdgDataHome.path)
+        XCTAssertEqual(state.environmentOverrides["XDG_CACHE_HOME"], state.xdgCacheHome.path)
+        XCTAssertEqual(state.environmentOverrides["XDG_STATE_HOME"], state.xdgStateHome.path)
+    }
+
+    func testRemoveSessionStateDeletesSessionDirectory() throws {
+        let root = temporaryOpenCodeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let sessionID = UUID()
+        let paths = OpenCodeRuntimePaths(sessionID: sessionID, rootDirectoryOverride: root)
+        let manager = OpenCodeStateSnapshotManager()
+
+        _ = try manager.prepareSessionState(paths: paths)
+        let marker = paths.sessionDirectory.appendingPathComponent("marker.txt", isDirectory: false)
+        try "marker".write(to: marker, atomically: true, encoding: .utf8)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+
+        manager.removeSessionState(paths: paths)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.sessionDirectory.path))
+    }
+
+    func testOpenCodeRuntimeStateDisplayMessagesAreStable() {
+        XCTAssertEqual(OpenCodeTileRuntimeState.idle.displayMessage, "Ready")
+        XCTAssertEqual(OpenCodeTileRuntimeState.starting.displayMessage, "Starting OpenCode...")
+        XCTAssertEqual(OpenCodeTileRuntimeState.live(urlString: "http://127.0.0.1:9999").displayMessage, "Live")
+    }
+
+    func testResolveExecutableReportsMissingToolDeterministically() async throws {
+        let root = temporaryOpenCodeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let runner = StubOpenCodeProcessRunner { executable, arguments, _ in
+            XCTAssertEqual(executable, "/usr/bin/which")
+            XCTAssertEqual(arguments, ["opencode"])
+            return ProcessResult(exitCode: 1, stdout: "", stderr: "not found")
+        }
+
+        let controller = OpenCodeTileController(
+            sessionID: UUID(),
+            itemID: UUID(),
+            launchDirectoryProvider: { FileManager.default.homeDirectoryForCurrentUser.path },
+            snapshotManager: OpenCodeStateSnapshotManager(),
+            processRunner: runner,
+            rootDirectoryOverride: root
+        )
+
+        do {
+            _ = try await controller.resolveOpenCodeExecutable()
+            XCTFail("Expected missing executable error")
+        } catch let error as OpenCodeRuntimeError {
+            guard case .missingExecutable = error else {
+                XCTFail("Unexpected OpenCode runtime error: \(error)")
+                return
+            }
+        }
+    }
+
+    private func temporaryOpenCodeRoot() -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("idx0-opencode-runtime-tests-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+}
+
+private struct StubOpenCodeProcessRunner: ProcessRunnerProtocol {
+    let block: @Sendable (String, [String], String?) async throws -> ProcessResult
+
+    init(block: @escaping @Sendable (String, [String], String?) async throws -> ProcessResult) {
+        self.block = block
+    }
+
+    func run(executable: String, arguments: [String], currentDirectory: String?) async throws -> ProcessResult {
+        try await block(executable, arguments, currentDirectory)
+    }
+}

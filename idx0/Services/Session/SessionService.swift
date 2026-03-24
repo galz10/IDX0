@@ -51,6 +51,7 @@ final class SessionService: ObservableObject {
     let t3SnapshotManager = T3StateSnapshotManager()
     let vscodeProvisioner = OpenVSCodeProvisioner()
     let vscodeSnapshotManager = VSCodeStateSnapshotManager()
+    let openCodeSnapshotManager = OpenCodeStateSnapshotManager()
     let niriAppRegistry: NiriAppRegistry
     let vscodeBrowserDebugPort = 9222
     let vscodeBrowserDebugConfigName = "Attach Chrome (idx-web)"
@@ -291,6 +292,43 @@ final class SessionService: ObservableObject {
                 },
                 cleanupSessionArtifacts: { service, sessionID in
                     service.vscodeSnapshotManager.removeSessionState(paths: VSCodeRuntimePaths(sessionID: sessionID))
+                }
+            ),
+            NiriAppDescriptor(
+                id: NiriAppID.openCode,
+                displayName: "OpenCode",
+                icon: "chevron.left.forwardslash.chevron.right.circle",
+                menuSubtitle: "Run embedded OpenCode desktop",
+                isVisibleInMenus: true,
+                supportsWebZoomPersistence: true,
+                startTile: { service, sessionID in
+                    service.niriAddSingletonAppRight(in: sessionID, appID: NiriAppID.openCode)
+                },
+                retryTile: { service, sessionID, itemID in
+                    service.retryNiriAppController(sessionID: sessionID, itemID: itemID, appID: NiriAppID.openCode)
+                },
+                stopTile: { service, itemID in
+                    service.stopNiriAppController(itemID: itemID, appID: NiriAppID.openCode)
+                },
+                ensureController: { service, sessionID, itemID in
+                    service.makeNiriOpenCodeController(sessionID: sessionID, itemID: itemID)
+                },
+                makeTileView: { service, sessionID, itemID in
+                    guard let controller: OpenCodeTileController = service.niriAppController(
+                        for: sessionID,
+                        itemID: itemID,
+                        appID: NiriAppID.openCode,
+                        as: OpenCodeTileController.self
+                    ) else {
+                        return AnyView(service.niriMissingAppTile(title: "OpenCode Unavailable"))
+                    }
+                    return AnyView(
+                        NiriOpenCodeTile(sessionID: sessionID, itemID: itemID, controller: controller)
+                            .environmentObject(service)
+                    )
+                },
+                cleanupSessionArtifacts: { service, sessionID in
+                    service.openCodeSnapshotManager.removeSessionState(paths: OpenCodeRuntimePaths(sessionID: sessionID))
                 }
             )
         ])

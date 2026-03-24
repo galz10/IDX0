@@ -261,6 +261,18 @@ extension SessionService {
         )
     }
 
+    func makeNiriOpenCodeController(sessionID: UUID, itemID: UUID) -> OpenCodeTileController? {
+        guard sessions.contains(where: { $0.id == sessionID }) else { return nil }
+        return OpenCodeTileController(
+            sessionID: sessionID,
+            itemID: itemID,
+            launchDirectoryProvider: { [weak self] in
+                self?.launchDirectory(for: sessionID) ?? FileManager.default.homeDirectoryForCurrentUser.path
+            },
+            snapshotManager: openCodeSnapshotManager
+        )
+    }
+
     func retryNiriAppController(sessionID: UUID, itemID: UUID, appID: String) {
         guard let controller = ensureNiriAppController(for: sessionID, itemID: itemID, appID: appID) else { return }
         controller.retry()
