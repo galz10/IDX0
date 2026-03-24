@@ -127,10 +127,19 @@ struct CommandPaletteOverlay: View {
     @ViewBuilder
     private func paletteRow(action: PaletteAction, isSelected: Bool) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: action.icon)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(action.isEnabled ? tc.secondaryText : tc.mutedText)
-                .frame(width: 20)
+            Group {
+                if let imageName = action.iconImageName {
+                    Image(imageName)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 13, height: 13)
+                } else {
+                    Image(systemName: action.icon)
+                        .font(.system(size: 11, weight: .medium))
+                }
+            }
+            .foregroundStyle(action.isEnabled ? tc.secondaryText : tc.mutedText)
+            .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(highlightedTitle(action.title))
@@ -384,6 +393,7 @@ struct CommandPaletteOverlay: View {
                     PaletteAction(
                         id: "niri-add-app-\(app.id)",
                         icon: app.icon,
+                        iconImageName: app.iconImageName,
                         title: "Niri: Add \(app.displayName) Tile",
                         detail: app.menuSubtitle,
                         searchText: "niri add app \(app.displayName.lowercased()) \(app.id)",
@@ -486,6 +496,7 @@ struct CommandPaletteOverlay: View {
 struct PaletteAction: Identifiable {
     let id: String
     let icon: String
+    var iconImageName: String? = nil
     let title: String
     let detail: String
     var shortcut: String? = nil

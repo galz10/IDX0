@@ -41,7 +41,7 @@ Workspace with an embedded browser tile:
 ## How People Use IDX0
 
 1. Create a session for a task (quick terminal, repo session, or worktree session).
-2. Open the tools you need in that session (terminal, browser, VS Code, OpenCode, and other tiles).
+2. Open the tools you need in that session (terminal, browser, VS Code, Excalidraw, OpenCode, and other tiles).
 3. Run an agent CLI and keep working while IDX0 tracks session activity.
 4. Save a checkpoint before major changes, then request review or create a handoff.
 5. Return later and continue from the same layout and session context.
@@ -54,6 +54,8 @@ Workspace with an embedded browser tile:
 - Niri mode:
   - Tile terminals, browser views, and app runtimes in flexible workspaces.
   - Use keyboard shortcuts and command palette for fast control.
+- Embedded app runtimes:
+  - Run VS Code and Excalidraw directly in the canvas as reusable singleton tiles.
 - Embedded browser:
   - In-session browsing with persisted history/bookmarks and cookie import support.
 - Tool launch integration:
