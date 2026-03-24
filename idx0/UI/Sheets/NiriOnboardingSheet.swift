@@ -40,7 +40,7 @@ private enum OnboardingStep: Int, CaseIterable {
         case .keybindingChoice:
             return "First, pick the keybinding style that fits your workflow. This controls which shortcuts appear in the next steps."
         case .addTileRight:
-            return "Add a new terminal column to the right of the focused tile."
+            return "Add a new terminal column to the right of the focused tile.\n\nNiri-native shortcut: Mod+T."
         case .focusLeft:
             return "Move your focus back to the tile on the left."
         case .focusRight:
@@ -50,7 +50,7 @@ private enum OnboardingStep: Int, CaseIterable {
         case .overview:
             return "Open Overview to see all your tiles at a bird\u{2019}s-eye view."
         case .closeTile:
-            return "Close the currently focused tile to clean up."
+            return "Close the currently focused tile to clean up.\n\nNiri-native shortcut: Mod+W."
         case .complete:
             return "You\u{2019}ve mastered the basics! Swipe your trackpad to pan, and use workspaces to organize vertically."
         }
