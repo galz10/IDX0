@@ -9,10 +9,13 @@ struct CommandPaletteOverlay: View {
     @FocusState private var queryFocused: Bool
     @State private var query = ""
     @State private var selectedIndex = 0
+    @State private var interactionReady = false
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.45)
+            // Invisible dismiss layer (no dimming)
+            Color.clear
+                .contentShape(Rectangle())
                 .ignoresSafeArea()
                 .onTapGesture { dismiss() }
 
@@ -20,105 +23,100 @@ struct CommandPaletteOverlay: View {
                 // Search field
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(tc.tertiaryText)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(tc.accent)
 
-                    TextField("Search commands...", text: $query)
+                    TextField("Search...", text: $query)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 14))
+                        .font(.system(size: 13))
                         .focused($queryFocused)
                         .onSubmit { executeSelected() }
                         .onChange(of: query) { _, _ in selectedIndex = 0 }
+
+                    if !query.isEmpty {
+                        Button {
+                            query = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(tc.tertiaryText)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    keyBadge("esc")
+                        .onTapGesture { dismiss() }
                 }
-                .padding(12)
-                .background(tc.surface0)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
 
                 Rectangle()
                     .fill(tc.divider)
                     .frame(height: 1)
 
                 // Results
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 2) {
-                            ForEach(Array(filteredActions.prefix(12).enumerated()), id: \.element.id) { index, action in
-                                paletteRow(action: action, isSelected: index == selectedIndex)
-                                    .id(action.id)
-                                    .onTapGesture {
-                                        guard action.isEnabled else { return }
-                                        selectedIndex = index
-                                        executeSelected()
-                                    }
+                if !filteredActions.isEmpty {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 2) {
+                                ForEach(Array(filteredActions.prefix(12).enumerated()), id: \.element.id) { index, action in
+                                    paletteRow(action: action, isSelected: index == selectedIndex)
+                                        .id(action.id)
+                                        .onTapGesture {
+                                            guard action.isEnabled else { return }
+                                            selectedIndex = index
+                                            executeSelected()
+                                        }
+                                        .onHover { hovering in
+                                            guard interactionReady, hovering, action.isEnabled else { return }
+                                            selectedIndex = index
+                                        }
+                                }
+                            }
+                            .padding(6)
+                        }
+                        .frame(maxHeight: 360)
+                        .scrollIndicators(.hidden)
+                        .scrollDisabled(!interactionReady)
+                        .onChange(of: selectedIndex) { _, newValue in
+                            if let action = filteredActions.prefix(12).dropFirst(newValue).first {
+                                withAnimation(.easeOut(duration: 0.08)) {
+                                    proxy.scrollTo(action.id, anchor: .center)
+                                }
                             }
                         }
-                        .padding(6)
                     }
-                    .frame(maxHeight: 360)
-                    .onChange(of: selectedIndex) { _, newValue in
-                        if let action = filteredActions.prefix(12).dropFirst(newValue).first {
-                            proxy.scrollTo(action.id, anchor: .center)
-                        }
-                    }
-                }
-
-                if filteredActions.isEmpty {
-                    Text("No matching commands")
-                        .font(.system(size: 12))
-                        .foregroundStyle(tc.tertiaryText)
-                        .padding(16)
-                }
-
-                Rectangle()
-                    .fill(tc.divider)
-                    .frame(height: 1)
-
-                // Footer
-                HStack(spacing: 16) {
-                    HStack(spacing: 4) {
-                        Text("↑↓")
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(tc.surface1, in: RoundedRectangle(cornerRadius: 3))
-                        Text("navigate")
+                } else {
+                    HStack {
+                        Image(systemName: "magnifyingglass")
                             .font(.system(size: 10))
+                            .foregroundStyle(tc.tertiaryText)
+                        Text("No results for \"\(query)\"")
+                            .font(.system(size: 11))
+                            .foregroundStyle(tc.tertiaryText)
                     }
-                    HStack(spacing: 4) {
-                        Text("↵")
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(tc.surface1, in: RoundedRectangle(cornerRadius: 3))
-                        Text("run")
-                            .font(.system(size: 10))
-                    }
-                    HStack(spacing: 4) {
-                        Text("esc")
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(tc.surface1, in: RoundedRectangle(cornerRadius: 3))
-                        Text("close")
-                            .font(.system(size: 10))
-                    }
-                    Spacer()
+                    .padding(12)
                 }
-                .foregroundStyle(tc.tertiaryText)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(tc.windowBackground)
             }
-            .frame(width: 520)
-            .background(tc.sidebarBackground, in: RoundedRectangle(cornerRadius: 12))
+            .frame(width: 420)
+            .background(tc.sidebarBackground, in: RoundedRectangle(cornerRadius: 10))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(tc.surface2.opacity(0.5), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(tc.surface2.opacity(0.4), lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
+            .shadow(color: .black.opacity(0.35), radius: 20, y: 6)
             .padding(.top, 60)
             .frame(maxHeight: .infinity, alignment: .top)
         }
-        .onAppear { queryFocused = true }
+        .onAppear {
+            interactionReady = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                queryFocused = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                interactionReady = true
+            }
+        }
         .onKeyPress(.escape) { dismiss(); return .handled }
         .onKeyPress(.downArrow) { moveSelection(1); return .handled }
         .onKeyPress(.upArrow) { moveSelection(-1); return .handled }
@@ -129,16 +127,25 @@ struct CommandPaletteOverlay: View {
         HStack(spacing: 10) {
             Image(systemName: action.icon)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(action.isEnabled ? tc.secondaryText : tc.mutedText)
-                .frame(width: 20)
+                .foregroundStyle(
+                    !action.isEnabled ? tc.mutedText :
+                    isSelected ? tc.accent : tc.secondaryText
+                )
+                .frame(width: 24, height: 24)
+                .background(
+                    !action.isEnabled ? tc.surface0 :
+                    isSelected ? tc.accent.opacity(0.1) : tc.surface1,
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                )
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(highlightedTitle(action.title))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(action.isEnabled ? tc.primaryText : tc.tertiaryText)
+                    .lineLimit(1)
 
                 Text(action.detail)
-                    .font(.system(size: 10))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(tc.tertiaryText)
                     .lineLimit(1)
             }
@@ -146,18 +153,22 @@ struct CommandPaletteOverlay: View {
             Spacer(minLength: 0)
 
             if let shortcut = action.shortcut {
-                Text(shortcut)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(tc.tertiaryText)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(tc.surface0, in: RoundedRectangle(cornerRadius: 4))
+                keyBadge(shortcut)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
         .background(isSelected ? tc.surface0 : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-        .contentShape(Rectangle())
+        .contentShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func keyBadge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .foregroundStyle(tc.tertiaryText)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(tc.surface1, in: RoundedRectangle(cornerRadius: 3))
     }
 
     private func highlightedTitle(_ title: String) -> AttributedString {
@@ -188,18 +199,10 @@ struct CommandPaletteOverlay: View {
         let actions = allActions
         guard !normalized.isEmpty else { return actions }
         return actions.filter { action in
-            fuzzyMatch(query: normalized, text: action.searchText)
+            FuzzyMatch.matches(query: normalized, text: action.searchText)
         }.sorted { lhs, rhs in
-            fuzzyScore(query: normalized, text: lhs.searchText) > fuzzyScore(query: normalized, text: rhs.searchText)
+            FuzzyMatch.score(query: normalized, text: lhs.searchText) > FuzzyMatch.score(query: normalized, text: rhs.searchText)
         }
-    }
-
-    private func fuzzyMatch(query: String, text: String) -> Bool {
-        FuzzyMatch.matches(query: query, text: text)
-    }
-
-    private func fuzzyScore(query: String, text: String) -> Int {
-        FuzzyMatch.score(query: query, text: text)
     }
 
     private func shortcutLabel(_ action: ShortcutActionID) -> String? {

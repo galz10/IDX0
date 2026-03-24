@@ -41,10 +41,7 @@ struct MainWindowSheets: ViewModifier {
                     .environmentObject(workflowService)
                     .frame(width: 480)
             }
-            .sheet(isPresented: $coordinator.showingRenameSessionSheet) {
-                RenameSessionSheet()
-                    .environmentObject(coordinator)
-            }
+            // Rename session is now an overlay in MainWindowView.
             .sheet(isPresented: $coordinator.showingKeyboardShortcuts) {
                 KeyboardShortcutsSheet()
                     .environmentObject(sessionService)

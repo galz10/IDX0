@@ -65,6 +65,24 @@ struct MainWindowView: View {
                     .zIndex(100)
             }
 
+            // Rename session overlay
+            if coordinator.showingRenameSessionSheet {
+                ZStack {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .ignoresSafeArea()
+                        .onTapGesture { coordinator.cancelRenameSession() }
+
+                    RenameSessionSheet()
+                        .environmentObject(coordinator)
+                        .padding(.top, 60)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .zIndex(100)
+                .onKeyPress(.escape) { coordinator.cancelRenameSession(); return .handled }
+            }
+
             // Niri onboarding coaching overlay
             if coordinator.showingNiriOnboarding {
                 NiriOnboardingOverlay()
@@ -77,6 +95,7 @@ struct MainWindowView: View {
         .animation(.easeOut(duration: 0.12), value: sessionService.settings.sidebarVisible)
         .animation(.spring(duration: 0.28, bounce: 0.12), value: coordinator.showingCommandPalette)
         .animation(.spring(duration: 0.28, bounce: 0.12), value: coordinator.showingQuickSwitch)
+        .animation(.spring(duration: 0.25, bounce: 0.1), value: coordinator.showingRenameSessionSheet)
         .animation(.easeOut(duration: 0.12), value: coordinator.showingCheckpoints)
         .animation(.easeOut(duration: 0.15), value: coordinator.showingDiffOverlay)
         .animation(.spring(duration: 0.35, bounce: 0.15), value: coordinator.showingNiriOnboarding)
