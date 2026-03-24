@@ -718,6 +718,102 @@ extension SessionServiceTests {
         XCTAssertFalse(service.adjustNiriFocusedWebTileZoom(for: session.id, delta: 0.1))
     }
 
+    func testNiriFocusedTileZoomToggleTracksFocusedItem() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Focused Zoom Toggle")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let focusedItemID = service.niriLayout(for: session.id).camera.focusedItemID else {
+            XCTFail("Expected focused tile")
+            return
+        }
+
+        XCTAssertNil(service.niriFocusedTileZoomItemID(for: session.id))
+        XCTAssertTrue(service.toggleNiriFocusedTileZoom(sessionID: session.id))
+        XCTAssertEqual(service.niriFocusedTileZoomItemID(for: session.id), focusedItemID)
+        XCTAssertTrue(service.toggleNiriFocusedTileZoom(sessionID: session.id))
+        XCTAssertNil(service.niriFocusedTileZoomItemID(for: session.id))
+    }
+
+    func testNiriFocusedTileZoomClearsWhenZoomedItemIsRemoved() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Focused Zoom Clear")).session
+        service.ensureNiriLayoutState(for: session.id)
+        guard let browserItemID = service.niriAddBrowserRight(in: session.id) else {
+            XCTFail("Expected browser tile")
+            return
+        }
+
+        XCTAssertTrue(service.toggleNiriFocusedTileZoom(sessionID: session.id))
+        XCTAssertEqual(service.niriFocusedTileZoomItemID(for: session.id), browserItemID)
+
+        service.closeNiriFocusedItem(in: session.id)
+
+        XCTAssertNil(service.niriFocusedTileZoomItemID(for: session.id))
+    }
+
+    func testNiriDefaultTileSizesApplyOnlyToNewTiles() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let session = try await service.createSession(from: SessionCreationRequest(title: "Niri Default Tile Sizes")).session
+        service.ensureNiriLayoutState(for: session.id)
+
+        service.saveSettings { settings in
+            settings.niri.defaultNewColumnWidth = 900
+            settings.niri.defaultNewTileHeight = 520
+        }
+
+        guard let firstItemID = service.niriAddTerminalRight(in: session.id) else {
+            XCTFail("Expected first terminal tile")
+            return
+        }
+
+        var layout = service.niriLayout(for: session.id)
+        guard let firstPath = service.findNiriItemPath(layout: layout, itemID: firstItemID) else {
+            XCTFail("Expected path for first tile")
+            return
+        }
+        let firstWidth = try XCTUnwrap(layout.workspaces[firstPath.workspaceIndex].columns[firstPath.columnIndex].preferredWidth)
+        let firstHeight = try XCTUnwrap(layout.workspaces[firstPath.workspaceIndex].columns[firstPath.columnIndex].items[firstPath.itemIndex].preferredHeight)
+        XCTAssertEqual(firstWidth, 900, accuracy: 0.001)
+        XCTAssertEqual(firstHeight, 520, accuracy: 0.001)
+
+        service.saveSettings { settings in
+            settings.niri.defaultNewColumnWidth = 1100
+            settings.niri.defaultNewTileHeight = 640
+        }
+
+        guard let secondItemID = service.niriAddTaskBelow(in: session.id),
+              let thirdItemID = service.niriAddTerminalRight(in: session.id) else {
+            XCTFail("Expected additional terminal tiles")
+            return
+        }
+
+        layout = service.niriLayout(for: session.id)
+        guard let secondPath = service.findNiriItemPath(layout: layout, itemID: secondItemID),
+              let thirdPath = service.findNiriItemPath(layout: layout, itemID: thirdItemID)
+        else {
+            XCTFail("Expected paths for new tiles")
+            return
+        }
+
+        let unchangedFirstWidth = try XCTUnwrap(layout.workspaces[firstPath.workspaceIndex].columns[firstPath.columnIndex].preferredWidth)
+        let unchangedFirstHeight = try XCTUnwrap(layout.workspaces[firstPath.workspaceIndex].columns[firstPath.columnIndex].items[firstPath.itemIndex].preferredHeight)
+        let secondHeight = try XCTUnwrap(layout.workspaces[secondPath.workspaceIndex].columns[secondPath.columnIndex].items[secondPath.itemIndex].preferredHeight)
+        let thirdWidth = try XCTUnwrap(layout.workspaces[thirdPath.workspaceIndex].columns[thirdPath.columnIndex].preferredWidth)
+        let thirdHeight = try XCTUnwrap(layout.workspaces[thirdPath.workspaceIndex].columns[thirdPath.columnIndex].items[thirdPath.itemIndex].preferredHeight)
+
+        XCTAssertEqual(unchangedFirstWidth, 900, accuracy: 0.001)
+        XCTAssertEqual(unchangedFirstHeight, 520, accuracy: 0.001)
+        XCTAssertEqual(secondHeight, 640, accuracy: 0.001)
+        XCTAssertEqual(thirdWidth, 1100, accuracy: 0.001)
+        XCTAssertEqual(thirdHeight, 640, accuracy: 0.001)
+    }
+
     func testNiriGenericAppSelectionEnsuresControllerViaDescriptorFactory() async throws {
         let registry = NiriAppRegistry()
         let fixture = try Fixture(niriAppRegistry: registry)

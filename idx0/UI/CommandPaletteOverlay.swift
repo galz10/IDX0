@@ -334,6 +334,13 @@ struct CommandPaletteOverlay: View {
                     run: { _ = coordinator.performCommand(.niriToggleColumnTabbedDisplay) }
                 ),
                 PaletteAction(
+                    id: "niri-focused-zoom", icon: "arrow.up.left.and.arrow.down.right", title: "Niri: Toggle Focused Tile Zoom",
+                    detail: "Make the focused tile fill the canvas viewport",
+                    shortcut: shortcutLabel(.niriToggleFocusedTileZoom), searchText: "niri focused tile zoom fullscreen max",
+                    isEnabled: selectedID != nil,
+                    run: { _ = coordinator.performCommand(.niriToggleFocusedTileZoom) }
+                ),
+                PaletteAction(
                     id: "niri-snap", icon: "dot.scope", title: "Niri: Toggle Snap",
                     detail: sessionService.settings.niri.snapEnabled ? "Disable snap and keep free-pan release" : "Enable velocity-based snap",
                     shortcut: shortcutLabel(.niriToggleSnap), searchText: "niri snap soft snap free pan velocity",

@@ -34,6 +34,56 @@ struct InlineGeneralSettings: View {
                     )
                 }
 
+                SettingRowView(
+                    label: "Default New Column Width",
+                    caption: "Optional width for newly created columns only (180 to 2400). Leave empty for automatic sizing."
+                ) {
+                    TextField(
+                        "Auto",
+                        text: niriOptionalDimensionBinding(
+                            get: { $0.defaultNewColumnWidth },
+                            set: { settings, value in settings.defaultNewColumnWidth = value },
+                            lowerBound: 180,
+                            upperBound: 2400
+                        )
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11, design: .monospaced))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(tc.surface0, in: RoundedRectangle(cornerRadius: 4))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(tc.surface2.opacity(0.5), lineWidth: 0.5)
+                    )
+                    .frame(maxWidth: 180, alignment: .leading)
+                }
+
+                SettingRowView(
+                    label: "Default New Tile Height",
+                    caption: "Optional height for newly created tiles only (120 to 2400). Leave empty for automatic sizing."
+                ) {
+                    TextField(
+                        "Auto",
+                        text: niriOptionalDimensionBinding(
+                            get: { $0.defaultNewTileHeight },
+                            set: { settings, value in settings.defaultNewTileHeight = value },
+                            lowerBound: 120,
+                            upperBound: 2400
+                        )
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11, design: .monospaced))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(tc.surface0, in: RoundedRectangle(cornerRadius: 4))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(tc.surface2.opacity(0.5), lineWidth: 0.5)
+                    )
+                    .frame(maxWidth: 180, alignment: .leading)
+                }
+
                 SettingToggleRow(
                     label: "Snap Gestures",
                     caption: "High-velocity trackpad gestures will snap to the nearest workspace or column target.",
@@ -101,6 +151,31 @@ struct InlineGeneralSettings: View {
         Binding(
             get: { sessionService.settings.niri.resizeCameraVisualizerEnabled },
             set: { value in sessionService.saveSettings { $0.niri.resizeCameraVisualizerEnabled = value } }
+        )
+    }
+
+    private func niriOptionalDimensionBinding(
+        get: @escaping (NiriSettings) -> Double?,
+        set: @escaping (inout NiriSettings, Double?) -> Void,
+        lowerBound: Double,
+        upperBound: Double
+    ) -> Binding<String> {
+        Binding(
+            get: {
+                guard let value = get(sessionService.settings.niri) else { return "" }
+                return String(Int(value.rounded()))
+            },
+            set: { rawValue in
+                sessionService.saveSettings { settings in
+                    let cleaned = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !cleaned.isEmpty else {
+                        set(&settings.niri, nil)
+                        return
+                    }
+                    guard let parsed = Double(cleaned) else { return }
+                    set(&settings.niri, max(lowerBound, min(parsed, upperBound)))
+                }
+            }
         )
     }
 }

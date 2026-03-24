@@ -95,8 +95,11 @@ struct NiriCanvasMetrics: Equatable {
     var headerHeight: CGFloat
     var originX: CGFloat
     var originY: CGFloat
+    var containerWidth: CGFloat
     var containerHeight: CGFloat
     var canvasScale: CGFloat
+    /// When set, the tile with this ID is zoomed to fill the viewport.
+    var zoomedItemID: UUID?
 }
 
 struct NiriCanvasRuntimeState {

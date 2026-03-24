@@ -250,6 +250,13 @@ struct idx0App: App {
                 .keyboardShortcut(shortcut(.niriToggleColumnTabbedDisplay))
                 .disabled(!coordinator.sessionService.settings.niriCanvasEnabled)
 
+                Button("Niri: Toggle Focused Tile Zoom") {
+                    guard coordinator.sessionService.selectedSessionID != nil else { return }
+                    _ = coordinator.performCommand(.niriToggleFocusedTileZoom)
+                }
+                .keyboardShortcut(shortcut(.niriToggleFocusedTileZoom))
+                .disabled(!coordinator.sessionService.settings.niriCanvasEnabled)
+
                 Button("Niri: Toggle Snap") {
                     _ = coordinator.performCommand(.niriToggleSnap)
                 }
