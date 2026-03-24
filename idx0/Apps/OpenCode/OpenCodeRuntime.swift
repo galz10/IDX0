@@ -390,6 +390,9 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         )
         let port = try reserveLoopbackPort()
         let launchDirectory = resolvedLaunchDirectory()
+        var runtimeEnvironmentWithLaunchDirectory = runtimeEnvironment
+        runtimeEnvironmentWithLaunchDirectory["PWD"] = launchDirectory
+        runtimeEnvironmentWithLaunchDirectory["INIT_CWD"] = launchDirectory
 
         state = .starting
         processExitedDuringStartup = false
@@ -397,7 +400,7 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
             executablePath: executablePath,
             port: port,
             launchDirectory: launchDirectory,
-            environment: runtimeEnvironment
+            environment: runtimeEnvironmentWithLaunchDirectory
         )
 
         let ready = await waitForServerReady(port: port)
@@ -536,7 +539,7 @@ final class OpenCodeTileController: ObservableObject, NiriAppTileRuntimeControll
         self.stdoutPipe = stdout
         self.stderrPipe = stderr
 
-        appendRuntimeLog("spawned opencode pid=\(process.processIdentifier) port=\(port)")
+        appendRuntimeLog("spawned opencode pid=\(process.processIdentifier) port=\(port) cwd=\(launchDirectory)")
     }
 
     private func buildRuntimeEnvironment(
