@@ -54,6 +54,7 @@ enum ShortcutActionID: String, Codable, CaseIterable, Hashable {
     case niriFocusWorkspaceDown
     case niriMoveColumnToWorkspaceUp
     case niriMoveColumnToWorkspaceDown
+    case niriToggleFocusedTileZoom
     case niriZoomInFocusedWebTile
     case niriZoomOutFocusedWebTile
 

@@ -252,11 +252,18 @@ final class AppCoordinator: ObservableObject {
             return false
         }
 
-        let layout = sessionService.niriLayout(for: selectedSessionID)
-        guard layout.isOverviewOpen else { return false }
-
         let modifiers = event.modifierFlags.intersection([.command, .option, .shift, .control])
         guard modifiers.isEmpty else { return false }
+
+        // Escape exits focused-tile zoom mode.
+        if event.keyCode == 53,
+           sessionService.niriFocusedTileZoomItemID(for: selectedSessionID) != nil {
+            sessionService.clearNiriFocusedTileZoom(sessionID: selectedSessionID)
+            return true
+        }
+
+        let layout = sessionService.niriLayout(for: selectedSessionID)
+        guard layout.isOverviewOpen else { return false }
 
         // Escape exits overview mode.
         if event.keyCode == 53 {
