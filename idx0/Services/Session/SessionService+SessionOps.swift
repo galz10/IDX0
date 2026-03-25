@@ -275,7 +275,8 @@ extension SessionService {
                 self?.launchDirectory(for: sessionID) ?? FileManager.default.homeDirectoryForCurrentUser.path
             },
             buildCoordinator: t3BuildCoordinator,
-            snapshotManager: t3SnapshotManager
+            snapshotManager: t3SnapshotManager,
+            browserControlEnabled: settings.browserControlConsent == .enabled
         )
     }
 
@@ -383,6 +384,139 @@ extension SessionService {
         }
 
         persistSoon()
+    }
+
+    func requestToggleBrowserSplit(for sessionID: UUID) {
+        _ = requestBrowserOpenIntent(.toggleBrowserSplit(sessionID: sessionID))
+    }
+
+    @discardableResult
+    func requestAddNiriBrowserTile(in sessionID: UUID) -> UUID? {
+        requestBrowserOpenIntent(.addNiriBrowserTile(sessionID: sessionID))
+    }
+
+    func requestOpenURLInSplit(_ url: URL, for sessionID: UUID?) {
+        guard let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            do {
+                try URLRoutingService(openLinksInDefaultBrowser: true).open(url)
+            } catch {
+                Logger.error("Failed to open URL in browser split: \(error.localizedDescription)")
+            }
+            return
+        }
+
+        guard let sessionID else {
+            do {
+                try URLRoutingService(openLinksInDefaultBrowser: true).open(url)
+            } catch {
+                Logger.error("Failed to open URL in default browser: \(error.localizedDescription)")
+            }
+            return
+        }
+
+        _ = requestBrowserOpenIntent(.openURLInSplit(url: url, sessionID: sessionID))
+    }
+
+    @discardableResult
+    func requestOpenClipboardURLInSplit(for sessionID: UUID?) -> Bool {
+        guard let value = NSPasteboard.general.string(forType: .string),
+              let url = normalizedURL(from: value) else {
+            return false
+        }
+        requestOpenURLInSplit(url, for: sessionID ?? selectedSessionID)
+        return true
+    }
+
+    func presentBrowserControlConsentPromptFromSettings() {
+        let mode: BrowserControlConsentPromptMode = settings.browserControlConsent == .enabled
+            ? .settingsRerun
+            : .settingsEnable
+        pendingBrowserControlConsentPrompt = BrowserControlConsentPrompt(mode: mode)
+    }
+
+    func performBrowserControlConsentPrimaryAction() {
+        guard let prompt = pendingBrowserControlConsentPrompt, !prompt.isInstalling else { return }
+        var updatedPrompt = prompt
+        updatedPrompt.isInstalling = true
+        updatedPrompt.setupErrorMessage = nil
+        pendingBrowserControlConsentPrompt = updatedPrompt
+
+        let mode = prompt.mode
+        let force = mode == .settingsRerun
+        let preferredBrowserAppURL = preferredVSCodeDebugBrowserURL()
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await browserControlSetupService.provision(
+                    force: force,
+                    preferredBrowserAppURL: preferredBrowserAppURL
+                )
+
+                switch mode {
+                case .settingsRerun:
+                    if settings.browserControlConsent == .undecided {
+                        saveSettings { settings in
+                            settings.browserControlConsent = .enabled
+                        }
+                    }
+                case .firstUse, .settingsEnable:
+                    saveSettings { settings in
+                        settings.browserControlConsent = .enabled
+                    }
+                }
+
+                pendingBrowserControlConsentPrompt = nil
+                replayQueuedBrowserOpenIntents()
+            } catch {
+                switch mode {
+                case .settingsRerun:
+                    break
+                case .firstUse, .settingsEnable:
+                    saveSettings { settings in
+                        settings.browserControlConsent = .undecided
+                    }
+                }
+
+                if var prompt = pendingBrowserControlConsentPrompt {
+                    prompt.isInstalling = false
+                    prompt.setupErrorMessage = error.localizedDescription
+                    pendingBrowserControlConsentPrompt = prompt
+                } else {
+                    pendingBrowserControlConsentPrompt = BrowserControlConsentPrompt(
+                        mode: mode,
+                        isInstalling: false,
+                        setupErrorMessage: error.localizedDescription
+                    )
+                }
+                replayQueuedBrowserOpenIntents()
+            }
+        }
+    }
+
+    func performBrowserControlConsentSecondaryAction() {
+        guard let prompt = pendingBrowserControlConsentPrompt,
+              !prompt.isInstalling else { return }
+
+        switch prompt.mode {
+        case .settingsRerun:
+            pendingBrowserControlConsentPrompt = nil
+        case .firstUse, .settingsEnable:
+            saveSettings { settings in
+                settings.browserControlConsent = .declined
+            }
+            pendingBrowserControlConsentPrompt = nil
+            replayQueuedBrowserOpenIntents()
+        }
+    }
+
+    func resetBrowserControlConsentForTesting() {
+        queuedBrowserOpenIntents.removeAll()
+        pendingBrowserControlConsentPrompt = nil
+        saveSettings { settings in
+            settings.browserControlConsent = .undecided
+        }
     }
 
     func setBrowserURL(for sessionID: UUID, urlString: String?) {
@@ -510,6 +644,43 @@ extension SessionService {
         }
         openURLInSplit(url, for: sessionID ?? selectedSessionID)
         return true
+    }
+
+    @discardableResult
+    private func requestBrowserOpenIntent(_ intent: BrowserOpenIntent) -> UUID? {
+        switch settings.browserControlConsent {
+        case .enabled, .declined:
+            return replayBrowserOpenIntent(intent)
+        case .undecided:
+            queuedBrowserOpenIntents.append(intent)
+            if pendingBrowserControlConsentPrompt == nil {
+                pendingBrowserControlConsentPrompt = BrowserControlConsentPrompt(mode: .firstUse)
+            }
+            return nil
+        }
+    }
+
+    @discardableResult
+    private func replayBrowserOpenIntent(_ intent: BrowserOpenIntent) -> UUID? {
+        switch intent {
+        case .toggleBrowserSplit(let sessionID):
+            toggleBrowserSplit(for: sessionID)
+            return nil
+        case .openURLInSplit(let url, let sessionID):
+            openURLInSplit(url, for: sessionID)
+            return nil
+        case .addNiriBrowserTile(let sessionID):
+            return niriAddBrowserRight(in: sessionID)
+        }
+    }
+
+    private func replayQueuedBrowserOpenIntents() {
+        guard !queuedBrowserOpenIntents.isEmpty else { return }
+        let queued = queuedBrowserOpenIntents
+        queuedBrowserOpenIntents.removeAll()
+        for intent in queued {
+            _ = replayBrowserOpenIntent(intent)
+        }
     }
 
     func revealWorktree(for sessionID: UUID) {

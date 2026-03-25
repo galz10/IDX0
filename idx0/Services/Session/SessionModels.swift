@@ -26,6 +26,35 @@ struct WorktreeInspectorRequest: Identifiable {
     let repoPath: String
 }
 
+enum BrowserOpenIntent: Equatable {
+    case toggleBrowserSplit(sessionID: UUID)
+    case openURLInSplit(url: URL, sessionID: UUID)
+    case addNiriBrowserTile(sessionID: UUID)
+}
+
+enum BrowserControlConsentPromptMode: Equatable {
+    case firstUse
+    case settingsEnable
+    case settingsRerun
+}
+
+struct BrowserControlConsentPrompt: Identifiable, Equatable {
+    let id = UUID()
+    var mode: BrowserControlConsentPromptMode
+    var isInstalling: Bool
+    var setupErrorMessage: String?
+
+    init(
+        mode: BrowserControlConsentPromptMode,
+        isInstalling: Bool = false,
+        setupErrorMessage: String? = nil
+    ) {
+        self.mode = mode
+        self.isInstalling = isInstalling
+        self.setupErrorMessage = setupErrorMessage
+    }
+}
+
 struct ProjectSessionSection: Identifiable {
     let group: ProjectGroup
     let sessions: [Session]

@@ -53,6 +53,11 @@ struct MainWindowSheets: ViewModifier {
                     .environmentObject(workflowService)
                     .frame(width: 560)
             }
+            .sheet(item: $sessionService.pendingBrowserControlConsentPrompt) { prompt in
+                BrowserControlConsentSheet(prompt: prompt)
+                    .environmentObject(sessionService)
+                    .interactiveDismissDisabled(true)
+            }
             .sheet(item: $sessionService.pendingWorktreeInspector) { request in
                 WorktreeInspectorSheet(repoPath: request.repoPath)
                     .environmentObject(sessionService)
@@ -60,4 +65,3 @@ struct MainWindowSheets: ViewModifier {
             }
     }
 }
-

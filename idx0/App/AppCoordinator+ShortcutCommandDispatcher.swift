@@ -139,7 +139,7 @@ extension AppCoordinator {
     ) -> Bool? {
         switch action {
         case .openClipboardURL:
-            return sessionService.openClipboardURLInSplit(for: selectedSessionID)
+            return sessionService.requestOpenClipboardURLInSplit(for: selectedSessionID)
         case .newTab:
             guard let selectedSessionID else { return false }
             _ = sessionService.createTab(in: selectedSessionID)
@@ -193,7 +193,7 @@ extension AppCoordinator {
             return true
         case .toggleBrowserSplit:
             guard let selectedSessionID else { return false }
-            sessionService.toggleBrowserSplit(for: selectedSessionID)
+            sessionService.requestToggleBrowserSplit(for: selectedSessionID)
             return true
         default:
             return nil
@@ -226,7 +226,7 @@ extension AppCoordinator {
             return true
         case .niriAddBrowserTile:
             guard niriEnabled, let selectedSessionID else { return false }
-            _ = sessionService.niriAddBrowserRight(in: selectedSessionID)
+            _ = sessionService.requestAddNiriBrowserTile(in: selectedSessionID)
             return true
         case .niriOpenAddTileMenu:
             return requestNiriAddTileMenu(for: selectedSessionID)

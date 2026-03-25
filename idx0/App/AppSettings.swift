@@ -31,6 +31,12 @@ enum ExternalLinkRouting: String, Codable, CaseIterable {
     }
 }
 
+enum BrowserControlConsent: String, Codable, CaseIterable {
+    case undecided
+    case enabled
+    case declined
+}
+
 enum NewSessionBehavior: String, Codable, CaseIterable {
     case quick
     case structured
@@ -262,7 +268,7 @@ struct NiriSettings: Codable, Equatable {
 }
 
 struct AppSettings: Codable, Equatable {
-    static let schemaVersion = 7
+    static let schemaVersion = 8
 
     var schemaVersion: Int
     var sidebarVisible: Bool
@@ -275,6 +281,7 @@ struct AppSettings: Codable, Equatable {
     var defaultSandboxProfile: SandboxProfile
     var defaultNetworkPolicy: NetworkPolicy
     var externalLinkRouting: ExternalLinkRouting
+    var browserControlConsent: BrowserControlConsent
     var browserSplitDefaultSide: SplitSide
     var restoreBehavior: RestoreBehavior
     var cleanupOnClose: Bool
@@ -302,6 +309,7 @@ struct AppSettings: Codable, Equatable {
         defaultSandboxProfile: SandboxProfile = .fullAccess,
         defaultNetworkPolicy: NetworkPolicy = .inherited,
         externalLinkRouting: ExternalLinkRouting = .defaultBrowser,
+        browserControlConsent: BrowserControlConsent = .undecided,
         browserSplitDefaultSide: SplitSide = .right,
         restoreBehavior: RestoreBehavior = .relaunchAllSessions,
         cleanupOnClose: Bool = false,
@@ -328,6 +336,7 @@ struct AppSettings: Codable, Equatable {
         self.defaultSandboxProfile = defaultSandboxProfile
         self.defaultNetworkPolicy = defaultNetworkPolicy
         self.externalLinkRouting = externalLinkRouting
+        self.browserControlConsent = browserControlConsent
         self.browserSplitDefaultSide = browserSplitDefaultSide
         self.restoreBehavior = restoreBehavior
         self.cleanupOnClose = cleanupOnClose
@@ -357,6 +366,7 @@ struct AppSettings: Codable, Equatable {
         case defaultSandboxProfile
         case defaultNetworkPolicy
         case externalLinkRouting
+        case browserControlConsent
         case browserSplitDefaultSide
         case restoreBehavior
         case cleanupOnClose
@@ -393,6 +403,7 @@ struct AppSettings: Codable, Equatable {
             externalLinkRouting = openLinks ? .defaultBrowser : .embeddedBrowser
         }
 
+        browserControlConsent = try container.decodeIfPresent(BrowserControlConsent.self, forKey: .browserControlConsent) ?? .undecided
         browserSplitDefaultSide = try container.decodeIfPresent(SplitSide.self, forKey: .browserSplitDefaultSide) ?? .right
         restoreBehavior = try container.decodeIfPresent(RestoreBehavior.self, forKey: .restoreBehavior) ?? .relaunchAllSessions
         cleanupOnClose = try container.decodeIfPresent(Bool.self, forKey: .cleanupOnClose) ?? false
@@ -422,6 +433,7 @@ struct AppSettings: Codable, Equatable {
         try container.encode(defaultSandboxProfile, forKey: .defaultSandboxProfile)
         try container.encode(defaultNetworkPolicy, forKey: .defaultNetworkPolicy)
         try container.encode(externalLinkRouting, forKey: .externalLinkRouting)
+        try container.encode(browserControlConsent, forKey: .browserControlConsent)
         try container.encode(browserSplitDefaultSide, forKey: .browserSplitDefaultSide)
         try container.encode(restoreBehavior, forKey: .restoreBehavior)
         try container.encode(cleanupOnClose, forKey: .cleanupOnClose)

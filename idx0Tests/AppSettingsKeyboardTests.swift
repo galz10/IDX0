@@ -20,6 +20,7 @@ final class AppSettingsKeyboardTests: XCTestCase {
         XCTAssertNil(decoded.terminalStartupCommandTemplate)
         XCTAssertNil(decoded.niri.defaultNewColumnWidth)
         XCTAssertNil(decoded.niri.defaultNewTileHeight)
+        XCTAssertEqual(decoded.browserControlConsent, .undecided)
     }
 
     func testRoundTripPersistsKeyboardSettings() throws {
@@ -31,6 +32,7 @@ final class AppSettingsKeyboardTests: XCTestCase {
         settings.terminalStartupCommandTemplate = "cd ${WORKDIR} && echo ${SESSION_ID}"
         settings.niri.defaultNewColumnWidth = 920
         settings.niri.defaultNewTileHeight = 540
+        settings.browserControlConsent = .enabled
         settings.customKeybindings[ShortcutActionID.niriToggleOverview.rawValue] = KeyChord(
             key: .o,
             modifiers: [.option, .control]
@@ -46,6 +48,7 @@ final class AppSettingsKeyboardTests: XCTestCase {
         XCTAssertEqual(decoded.terminalStartupCommandTemplate, "cd ${WORKDIR} && echo ${SESSION_ID}")
         XCTAssertEqual(decoded.niri.defaultNewColumnWidth, 920)
         XCTAssertEqual(decoded.niri.defaultNewTileHeight, 540)
+        XCTAssertEqual(decoded.browserControlConsent, .enabled)
         XCTAssertEqual(
             decoded.customKeybindings[ShortcutActionID.niriToggleOverview.rawValue],
             KeyChord(key: .o, modifiers: [.option, .control])

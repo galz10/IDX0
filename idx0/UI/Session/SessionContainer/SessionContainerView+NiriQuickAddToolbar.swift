@@ -137,7 +137,7 @@ extension SessionContainerView {
             searchText: "browser web view globe url http tile add",
             section: .apps,
             run: {
-                _ = self.sessionService.niriAddBrowserRight(in: sessionID)
+                _ = self.sessionService.requestAddNiriBrowserTile(in: sessionID)
             }
         ))
 

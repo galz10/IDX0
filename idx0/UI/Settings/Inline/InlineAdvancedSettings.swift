@@ -67,6 +67,44 @@ struct InlineAdvancedSettings: View {
             }
 
             SettingDivider()
+            SettingSectionHeader(title: "Browser Control")
+
+            SettingRowView(
+                label: "Agent Browser Automation",
+                caption: browserControlStatusText
+            ) {
+                HStack(spacing: 8) {
+                    Button(primaryBrowserControlButtonTitle) {
+                        sessionService.presentBrowserControlConsentPromptFromSettings()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(tc.secondaryText)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(tc.surface0, in: RoundedRectangle(cornerRadius: 4))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(tc.surface2.opacity(0.5), lineWidth: 0.5)
+                    )
+
+                    Button("Reset") {
+                        sessionService.resetBrowserControlConsentForTesting()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(tc.tertiaryText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(tc.surface0, in: RoundedRectangle(cornerRadius: 4))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(tc.surface2.opacity(0.5), lineWidth: 0.5)
+                    )
+                }
+            }
+
+            SettingDivider()
             SettingSectionHeader(title: "Reset")
 
             VStack(alignment: .leading, spacing: 10) {
@@ -156,5 +194,22 @@ struct InlineAdvancedSettings: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(tc.surface0, in: RoundedRectangle(cornerRadius: 4))
+    }
+
+    private var primaryBrowserControlButtonTitle: String {
+        sessionService.settings.browserControlConsent == .enabled
+            ? "Re-run Browser Control Setup"
+            : "Enable Browser Control"
+    }
+
+    private var browserControlStatusText: String {
+        switch sessionService.settings.browserControlConsent {
+        case .undecided:
+            return "Browser control has not been configured yet."
+        case .enabled:
+            return "Browser control is enabled."
+        case .declined:
+            return "Browser control prompt was declined. You can enable it any time."
+        }
     }
 }

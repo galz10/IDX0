@@ -75,6 +75,7 @@ final class OpenCodeStateSnapshotManager {
         fileManager: FileManager = .default
     ) throws -> OpenCodeSessionState {
         try paths.ensureBaseDirectories(fileManager: fileManager)
+        try upsertIDX0BrowserMCPConfigIfAvailable(paths: paths, fileManager: fileManager)
         return OpenCodeSessionState(
             xdgConfigHome: paths.xdgConfigHomeDirectory,
             xdgDataHome: paths.xdgDataHomeDirectory,
@@ -88,6 +89,116 @@ final class OpenCodeStateSnapshotManager {
         fileManager: FileManager = .default
     ) {
         try? fileManager.removeItem(at: paths.sessionDirectory)
+    }
+
+    private func upsertIDX0BrowserMCPConfigIfAvailable(
+        paths: OpenCodeRuntimePaths,
+        fileManager: FileManager
+    ) throws {
+        let idx0Root = paths.rootDirectory.deletingLastPathComponent()
+        let wrapperScriptURL = BrowserControlSetupService.wrapperScriptURL(appSupportDirectory: idx0Root)
+        guard fileManager.isExecutableFile(atPath: wrapperScriptURL.path) else { return }
+
+        let opencodeConfigDirectoryURL = paths.xdgConfigHomeDirectory
+            .appendingPathComponent("opencode", isDirectory: true)
+        let opencodeConfigURL = opencodeConfigDirectoryURL
+            .appendingPathComponent("opencode.json", isDirectory: false)
+
+        try fileManager.createDirectory(at: opencodeConfigDirectoryURL, withIntermediateDirectories: true)
+
+        var root: [String: Any] = [:]
+        if fileManager.fileExists(atPath: opencodeConfigURL.path) {
+            let data = try Data(contentsOf: opencodeConfigURL)
+            let text = String(decoding: data, as: UTF8.self)
+            let stripped = stripJSONComments(from: text)
+            guard let parsedData = stripped.data(using: .utf8),
+                  let parsed = try JSONSerialization.jsonObject(with: parsedData) as? [String: Any]
+            else {
+                Logger.error("Skipping OpenCode MCP merge: existing opencode.json is invalid.")
+                return
+            }
+            root = parsed
+        }
+
+        if root["$schema"] == nil {
+            root["$schema"] = "https://opencode.ai/config.json"
+        }
+
+        var mcp = root["mcp"] as? [String: Any] ?? [:]
+        mcp[BrowserControlSetupService.mcpServerName] = [
+            "type": "local",
+            "command": [wrapperScriptURL.path],
+            "enabled": true,
+        ]
+        root["mcp"] = mcp
+
+        let encoded = try JSONSerialization.data(
+            withJSONObject: root,
+            options: [.prettyPrinted, .sortedKeys]
+        ) + Data([0x0A])
+        try encoded.write(to: opencodeConfigURL, options: .atomic)
+    }
+
+    private func stripJSONComments(from text: String) -> String {
+        var output = String()
+        var index = text.startIndex
+        var isInString = false
+        var isEscaped = false
+
+        while index < text.endIndex {
+            let character = text[index]
+
+            if isInString {
+                output.append(character)
+                if isEscaped {
+                    isEscaped = false
+                } else if character == "\\" {
+                    isEscaped = true
+                } else if character == "\"" {
+                    isInString = false
+                }
+                index = text.index(after: index)
+                continue
+            }
+
+            if character == "\"" {
+                isInString = true
+                output.append(character)
+                index = text.index(after: index)
+                continue
+            }
+
+            if character == "/" {
+                let nextIndex = text.index(after: index)
+                if nextIndex < text.endIndex {
+                    let nextCharacter = text[nextIndex]
+                    if nextCharacter == "/" {
+                        index = text.index(after: nextIndex)
+                        while index < text.endIndex, text[index] != "\n" {
+                            index = text.index(after: index)
+                        }
+                        continue
+                    }
+                    if nextCharacter == "*" {
+                        index = text.index(after: nextIndex)
+                        while index < text.endIndex {
+                            let candidateEnd = text.index(after: index)
+                            if text[index] == "*", candidateEnd < text.endIndex, text[candidateEnd] == "/" {
+                                index = text.index(after: candidateEnd)
+                                break
+                            }
+                            index = text.index(after: index)
+                        }
+                        continue
+                    }
+                }
+            }
+
+            output.append(character)
+            index = text.index(after: index)
+        }
+
+        return output
     }
 }
 
