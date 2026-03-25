@@ -15,8 +15,9 @@ RUN_SETUP=1
 RUN_PROJECT_GEN=1
 RUN_TESTS=1
 RUN_MAINTAINABILITY=1
-NOTARIZE=0
 NOTARY_PROFILE="${NOTARY_PROFILE:-}"
+DMG_SIGNING_IDENTITY="${DMG_SIGNING_IDENTITY:-}"
+RUN_DMG_SMOKE_TEST=1
 
 OUTPUT_DIR="$ROOT_DIR/dist"
 DERIVED_DATA_PATH="$ROOT_DIR/.build/derived-release"
@@ -36,8 +37,9 @@ Options:
   --skip-project-gen          Skip xcodegen generate
   --skip-tests                Skip xcodebuild test gate
   --skip-maintainability      Skip ./scripts/maintainability-gate.sh
-  --notarize                  Submit zip + dmg to Apple notarization and staple dmg
-  --notary-profile <name>     Keychain profile for notarytool (required with --notarize if NOTARY_PROFILE is unset)
+  --skip-dmg-smoke-test       Skip post-notarization DMG smoke test
+  --notary-profile <name>     Keychain profile for notarytool (required; can also use NOTARY_PROFILE)
+  --dmg-sign-identity <name>  Signing identity for DMG codesign (required; can also use DMG_SIGNING_IDENTITY)
   -h, --help                  Show this help text
 EOF
 }
@@ -80,12 +82,16 @@ while [[ $# -gt 0 ]]; do
       RUN_MAINTAINABILITY=0
       shift
       ;;
-    --notarize)
-      NOTARIZE=1
+    --skip-dmg-smoke-test)
+      RUN_DMG_SMOKE_TEST=0
       shift
       ;;
     --notary-profile)
       NOTARY_PROFILE="${2:-}"
+      shift 2
+      ;;
+    --dmg-sign-identity)
+      DMG_SIGNING_IDENTITY="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -105,9 +111,15 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
-if [[ "$NOTARIZE" -eq 1 && -z "$NOTARY_PROFILE" ]]; then
-  echo "error: notarization requested but no notary profile provided." >&2
+if [[ -z "$NOTARY_PROFILE" ]]; then
+  echo "error: no notary profile provided." >&2
   echo "hint: pass --notary-profile <name> or export NOTARY_PROFILE=<name>" >&2
+  exit 1
+fi
+
+if [[ -z "$DMG_SIGNING_IDENTITY" ]]; then
+  echo "error: no DMG signing identity provided." >&2
+  echo "hint: pass --dmg-sign-identity <name> or export DMG_SIGNING_IDENTITY=<name>" >&2
   exit 1
 fi
 
@@ -119,10 +131,7 @@ require_cmd hdiutil
 require_cmd shasum
 require_cmd codesign
 require_cmd spctl
-
-if [[ "$NOTARIZE" -eq 1 ]]; then
-  require_cmd xcrun
-fi
+require_cmd xcrun
 
 echo "==> Manual release configuration"
 echo "Version: $VERSION"
@@ -132,10 +141,10 @@ echo "Run setup: $RUN_SETUP"
 echo "Run project generation: $RUN_PROJECT_GEN"
 echo "Run tests: $RUN_TESTS"
 echo "Run maintainability gate: $RUN_MAINTAINABILITY"
-echo "Notarize: $NOTARIZE"
-if [[ "$NOTARIZE" -eq 1 ]]; then
-  echo "Notary profile: $NOTARY_PROFILE"
-fi
+echo "Notarize: 1"
+echo "Notary profile: $NOTARY_PROFILE"
+echo "DMG signing identity: $DMG_SIGNING_IDENTITY"
+echo "Run DMG smoke test: $RUN_DMG_SMOKE_TEST"
 echo
 
 mkdir -p "$OUTPUT_DIR"
@@ -202,7 +211,19 @@ tar -czf "$TAR_PATH" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
 
 echo "==> Packaging dmg"
 DMG_STAGE_DIR="$(mktemp -d "$ROOT_DIR/.build/dmg-stage.XXXXXX")"
+DMG_MOUNT_POINT=""
+DMG_DEVICE=""
 cleanup() {
+  if [[ -n "${DMG_DEVICE:-}" ]]; then
+    hdiutil detach "$DMG_DEVICE" >/dev/null 2>&1 || true
+    DMG_DEVICE=""
+  elif [[ -n "${DMG_MOUNT_POINT:-}" ]]; then
+    hdiutil detach "$DMG_MOUNT_POINT" >/dev/null 2>&1 || true
+    DMG_MOUNT_POINT=""
+  fi
+  if [[ -n "${DMG_MOUNT_POINT:-}" ]]; then
+    rm -rf "$DMG_MOUNT_POINT"
+  fi
   rm -rf "$DMG_STAGE_DIR"
 }
 trap cleanup EXIT
@@ -212,15 +233,47 @@ ln -s /Applications "$DMG_STAGE_DIR/Applications"
 rm -f "$DMG_PATH"
 hdiutil create -volname "IDX0" -srcfolder "$DMG_STAGE_DIR" -ov -format UDZO "$DMG_PATH"
 
-if [[ "$NOTARIZE" -eq 1 ]]; then
-  echo "==> Notarizing zip"
-  xcrun notarytool submit "$ZIP_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
+echo "==> Signing dmg"
+codesign --force --sign "$DMG_SIGNING_IDENTITY" --timestamp "$DMG_PATH"
+codesign --verify --verbose=2 "$DMG_PATH"
 
-  echo "==> Notarizing dmg"
-  xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
+echo "==> Notarizing zip"
+xcrun notarytool submit "$ZIP_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
 
-  echo "==> Stapling dmg"
-  xcrun stapler staple "$DMG_PATH"
+echo "==> Notarizing dmg"
+xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
+
+echo "==> Stapling dmg"
+xcrun stapler staple "$DMG_PATH"
+
+if [[ "$RUN_DMG_SMOKE_TEST" -eq 1 ]]; then
+  echo "==> Running dmg smoke test"
+  DMG_MOUNT_POINT="$(mktemp -d "$ROOT_DIR/.build/dmg-mount.XXXXXX")"
+  ATTACH_OUTPUT="$(hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$DMG_MOUNT_POINT")"
+  DMG_DEVICE="$(echo "$ATTACH_OUTPUT" | awk '/^\/dev\// {print $1; exit}')"
+
+  MOUNTED_APP_PATH="$DMG_MOUNT_POINT/idx0.app"
+  if [[ ! -d "$MOUNTED_APP_PATH" ]]; then
+    echo "error: smoke test failed; mounted DMG missing idx0.app at $MOUNTED_APP_PATH" >&2
+    exit 1
+  fi
+
+  if [[ ! -L "$DMG_MOUNT_POINT/Applications" ]]; then
+    echo "error: smoke test failed; mounted DMG missing /Applications symlink" >&2
+    exit 1
+  fi
+
+  codesign --verify --deep --strict --verbose=2 "$MOUNTED_APP_PATH"
+  spctl --assess --type execute --verbose "$MOUNTED_APP_PATH"
+
+  if [[ -n "$DMG_DEVICE" ]]; then
+    hdiutil detach "$DMG_DEVICE" >/dev/null
+    DMG_DEVICE=""
+  else
+    hdiutil detach "$DMG_MOUNT_POINT" >/dev/null
+  fi
+  rm -rf "$DMG_MOUNT_POINT"
+  DMG_MOUNT_POINT=""
 fi
 
 echo "==> Writing SHA256 checksums"
