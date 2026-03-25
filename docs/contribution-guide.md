@@ -53,8 +53,11 @@ Suggested branch naming:
 3. Implement in smallest viable slice.
 4. Add/update tests in `idx0Tests/**`.
 5. Run local gates:
-   - `./scripts/maintainability-gate.sh`
-   - `xcodebuild ... test` (or targeted suites during iteration)
+  - `./scripts/install-hooks.sh` (one-time per clone)
+  - `./scripts/presubmit.sh fast` for quick local iteration
+  - `./scripts/presubmit.sh lint`
+  - `./scripts/presubmit.sh docs`
+  - `./scripts/presubmit.sh test` (or targeted suites during iteration)
 6. Update docs for behavioral, architectural, or protocol changes.
 7. Submit PR with risk notes and verification commands.
 
@@ -129,5 +132,7 @@ A change is done when:
 - [ ] Scope is focused and reversible.
 - [ ] Tests cover new behavior and regressions.
 - [ ] `docs/` updated where behavior/contracts changed.
+- [ ] `lint-docs` and `tests` checks are green.
+- [ ] `maintainability` report has been reviewed.
 - [ ] Commands used for verification listed in PR description.
 - [ ] Risks/follow-ups explicitly noted.

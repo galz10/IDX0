@@ -1,0 +1,67 @@
+name: Presubmit
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-docs:
+    name: lint-docs
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install lint + docs tools
+        run: |
+          brew install swiftformat swiftlint lychee
+          npm install -g markdownlint-cli
+
+      - name: Run lint checks
+        env:
+          PRESUBMIT_RUN_MAINTAINABILITY: '0'
+        run: ./scripts/presubmit.sh lint
+
+      - name: Run docs checks
+        run: ./scripts/presubmit.sh docs
+
+  tests:
+    name: tests
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install test prerequisites
+        run: |
+          brew install zig xcodegen
+          xcodebuild -downloadComponent MetalToolchain
+
+      - name: Setup GhosttyKit
+        run: ./scripts/setup.sh
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Run test suite
+        run: ./scripts/presubmit.sh test
+
+  maintainability:
+    name: maintainability
+    runs-on: macos-15
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run maintainability gate (phase 1 report-only)
+        run: ./scripts/maintainability-gate.sh

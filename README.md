@@ -137,14 +137,16 @@ Protocol reference:
 ## Quality Gates
 
 ```bash
-# Build + tests
-xcodebuild -project idx0.xcodeproj -scheme idx0 -destination 'platform=macOS' test
+# Install repo-managed hooks (one-time per clone)
+./scripts/install-hooks.sh
 
-# Maintainability policy gate
-./scripts/maintainability-gate.sh
+# Fast local checks (used by pre-commit)
+./scripts/presubmit.sh fast
 
-# Core coverage gate
-./scripts/coverage-core.sh
+# Full presubmit gates
+./scripts/presubmit.sh lint
+./scripts/presubmit.sh docs
+./scripts/presubmit.sh test
 ```
 
 ## Troubleshooting
