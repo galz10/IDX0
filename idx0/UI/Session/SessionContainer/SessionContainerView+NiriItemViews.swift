@@ -3,6 +3,76 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+/// Preference key to report the tab divider row size up to the parent.
+private struct NiriTabDividerSizeKey: PreferenceKey {
+    nonisolated(unsafe) static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        value = nextValue()
+    }
+}
+
+/// A shape that traces the notebook-divider outline: tabs protruding from the top-left,
+/// then the full-width tile body below.
+private struct NiriNotebookDividerShape: Shape {
+    var tabWidth: CGFloat
+    var tabHeight: CGFloat
+    var cornerRadius: CGFloat = 10
+    var tabCornerRadius: CGFloat = 8
+
+    func path(in rect: CGRect) -> Path {
+        let tw = min(tabWidth, rect.width)
+        let th = tabHeight
+        let cr = cornerRadius
+        let tcr = tabCornerRadius
+
+        var p = Path()
+
+        // Start at top-left of tab area (with rounded corner)
+        p.move(to: CGPoint(x: 0, y: tcr))
+        p.addArc(
+            center: CGPoint(x: tcr, y: tcr),
+            radius: tcr, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false
+        )
+
+        // Top edge of tabs
+        p.addLine(to: CGPoint(x: tw - tcr, y: 0))
+        p.addArc(
+            center: CGPoint(x: tw - tcr, y: tcr),
+            radius: tcr, startAngle: .degrees(270), endAngle: .degrees(0), clockwise: false
+        )
+
+        // Right edge of tab, down to body top
+        p.addLine(to: CGPoint(x: tw, y: th))
+
+        // Body top edge (from tab right edge to body right edge)
+        p.addLine(to: CGPoint(x: rect.width - cr, y: th))
+        p.addArc(
+            center: CGPoint(x: rect.width - cr, y: th + cr),
+            radius: cr, startAngle: .degrees(270), endAngle: .degrees(0), clockwise: false
+        )
+
+        // Right edge down
+        p.addLine(to: CGPoint(x: rect.width, y: rect.height - cr))
+        p.addArc(
+            center: CGPoint(x: rect.width - cr, y: rect.height - cr),
+            radius: cr, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false
+        )
+
+        // Bottom edge
+        p.addLine(to: CGPoint(x: cr, y: rect.height))
+        p.addArc(
+            center: CGPoint(x: cr, y: rect.height - cr),
+            radius: cr, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false
+        )
+
+        // Left edge back up
+        p.addLine(to: CGPoint(x: 0, y: tcr))
+
+        p.closeSubpath()
+        return p
+    }
+}
+
 extension SessionContainerView {
     @ViewBuilder
     func niriCanvasItemView(
@@ -40,7 +110,8 @@ extension SessionContainerView {
             core,
             layout: layout,
             isFocused: isFocused,
-            itemID: item.id
+            itemID: item.id,
+            item: item
         )
 
         let interactive = niriCanvasItemInteractions(
@@ -77,21 +148,155 @@ extension SessionContainerView {
         item: NiriLayoutItem,
         isFocused: Bool,
         itemWidth: CGFloat,
-        itemHeight: CGFloat
+        itemHeight: CGFloat,
+        showHeader: Bool = true
     ) -> some View {
-        VStack(spacing: 0) {
-            niriCanvasItemHeader(
-                sessionID: session.id,
-                workspaceIndex: workspaceIndex,
-                columnIndex: columnIndex,
-                item: item,
-                isFocused: isFocused
+        VStack(alignment: .leading, spacing: 0) {
+            if item.showsTabBar {
+                // Notebook-divider tabs: small tabs protruding above the tile body.
+                // Canvas background is visible to the right of the last tab.
+                niriTileTabDividers(
+                    session: session,
+                    item: item,
+                    workspaceIndex: workspaceIndex,
+                    columnIndex: columnIndex,
+                    isFocused: isFocused
+                )
+                .fixedSize(horizontal: true, vertical: true)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(key: NiriTabDividerSizeKey.self, value: geo.size)
+                    }
+                )
+            }
+
+            // Main tile body
+            VStack(spacing: 0) {
+                if !item.showsTabBar, showHeader {
+                    niriCanvasItemHeader(
+                        sessionID: session.id,
+                        workspaceIndex: workspaceIndex,
+                        columnIndex: columnIndex,
+                        item: item,
+                        isFocused: isFocused
+                    )
+                }
+                niriCanvasItemBodyContent(session: session, layout: layout, item: item)
+                    .frame(maxHeight: .infinity)
+            }
+            .clipShape(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: item.showsTabBar ? 0 : 10,
+                    bottomLeadingRadius: 10,
+                    bottomTrailingRadius: 10,
+                    topTrailingRadius: 10
+                )
             )
-            niriCanvasItemBodyContent(session: session, layout: layout, item: item)
+            .background(
+                tc.surface0,
+                in: UnevenRoundedRectangle(
+                    topLeadingRadius: item.showsTabBar ? 0 : 10,
+                    bottomLeadingRadius: 10,
+                    bottomTrailingRadius: 10,
+                    topTrailingRadius: 10
+                )
+            )
         }
         .frame(width: itemWidth, height: itemHeight)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .background(tc.surface0, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Notebook planner divider-style tabs. Each tab is a small protruding tab
+    /// with rounded top corners. Canvas background is visible to the right.
+    @ViewBuilder
+    func niriTileTabDividers(
+        session: Session,
+        item: NiriLayoutItem,
+        workspaceIndex: Int,
+        columnIndex: Int,
+        isFocused: Bool
+    ) -> some View {
+        let activeTabID = item.currentTerminalTabID
+        HStack(spacing: 2) {
+            ForEach(item.terminalTabIDs, id: \.self) { tabID in
+                let isSelected = tabID == activeTabID
+                let tabTitle = niriTabTitle(sessionID: session.id, tabID: tabID)
+                Button {
+                    sessionService.niriSwitchTabInTile(
+                        sessionID: session.id,
+                        itemID: item.id,
+                        tabID: tabID
+                    )
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(tabTitle)
+                            .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        if item.terminalTabIDs.count > 1 {
+                            Button {
+                                sessionService.niriCloseTabInTile(
+                                    sessionID: session.id,
+                                    itemID: item.id,
+                                    tabID: tabID
+                                )
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 7, weight: .medium))
+                                    .foregroundStyle(tc.tertiaryText.opacity(0.7))
+                                    .frame(width: 14, height: 14)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .foregroundStyle(isSelected ? tc.primaryText : tc.tertiaryText)
+                    .background(
+                        tc.surface0.opacity(isSelected ? 1.0 : 0.7),
+                        in: UnevenRoundedRectangle(
+                            topLeadingRadius: 8,
+                            bottomLeadingRadius: 0,
+                            bottomTrailingRadius: 0,
+                            topTrailingRadius: 8
+                        )
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            // "+" button as a small divider tab
+            Button {
+                sessionService.niriAddTabToTile(
+                    sessionID: session.id,
+                    itemID: item.id
+                )
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(tc.tertiaryText)
+                    .frame(width: 22, height: 22)
+                    .background(
+                        tc.surface0.opacity(0.5),
+                        in: UnevenRoundedRectangle(
+                            topLeadingRadius: 8,
+                            bottomLeadingRadius: 0,
+                            bottomTrailingRadius: 0,
+                            topTrailingRadius: 8
+                        )
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Nothing to the right — canvas shows through
+        }
+    }
+
+    func niriTabTitle(sessionID: UUID, tabID: UUID) -> String {
+        let title = sessionService.tabState(sessionID: sessionID, tabID: tabID)?.title
+        return niriTerminalTileTitle(from: title)
     }
 
     func niriCanvasItemHeader(
@@ -101,29 +306,37 @@ extension SessionContainerView {
         item: NiriLayoutItem,
         isFocused: Bool
     ) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             Text(niriItemTitle(sessionID: sessionID, item: item))
                 .font(.system(size: 10, weight: .semibold))
                 .lineLimit(1)
-            Text("w\(workspaceIndex + 1) · c\(columnIndex + 1)")
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .truncationMode(.tail)
+                .layoutPriority(1)
+            Text("w\(workspaceIndex + 1)·c\(columnIndex + 1)")
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
                 .foregroundStyle(tc.tertiaryText)
-            Spacer()
+                .lineLimit(1)
+                .fixedSize()
+                .layoutPriority(0)
+            Spacer(minLength: 0)
             Button {
                 sessionService.closeNiriItem(sessionID: sessionID, itemID: item.id)
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .bold))
+                    .font(.system(size: 7, weight: .bold))
                     .foregroundStyle(tc.tertiaryText)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 14, height: 14)
                     .idxHitTarget()
             }
             .buttonStyle(.plain)
             .opacity(isFocused ? 1 : 0.5)
+            .fixedSize()
+            .layoutPriority(2)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
         .background(tc.surface0.opacity(0.6))
+        .clipped()
     }
 
     @ViewBuilder
@@ -133,7 +346,8 @@ extension SessionContainerView {
         item: NiriLayoutItem
     ) -> some View {
         switch item.ref {
-        case .terminal(let tabID):
+        case .terminal:
+            let tabID = item.currentTerminalTabID ?? { if case .terminal(let id) = item.ref { return id }; return UUID() }()
             if let tab = sessionService.tabState(sessionID: session.id, tabID: tabID) {
                 let paneTree = tab.paneTree
                     ?? .terminal(id: tab.activeControllerID, controllerID: tab.activeControllerID)
@@ -182,42 +396,22 @@ extension SessionContainerView {
         _ content: Content,
         layout: NiriCanvasLayout,
         isFocused: Bool,
-        itemID: UUID
+        itemID: UUID,
+        item: NiriLayoutItem
     ) -> some View {
         let isDragging = niriTileDrag?.itemID == itemID
         let dragTranslation = isDragging ? (niriTileDrag?.translation ?? .zero) : .zero
 
-        return content
-            .overlay {
-                if layout.isOverviewOpen {
-                    VStack(spacing: 0) {
-                        Color.clear
-                            .frame(height: 26)
-                            .allowsHitTesting(false)
-                        RoundedRectangle(cornerRadius: 0)
-                            .fill(Color.black.opacity(0.2))
-                            .clipShape(
-                                UnevenRoundedRectangle(
-                                    topLeadingRadius: 0, bottomLeadingRadius: 10,
-                                    bottomTrailingRadius: 10, topTrailingRadius: 0
-                                )
-                            )
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isFocused ? tc.accent.opacity(0.4) : tc.divider.opacity(0.5), lineWidth: 1)
-                    .animation(.easeOut(duration: 0.15), value: isFocused)
-            }
-            .shadow(color: isFocused ? tc.accent.opacity(0.1) : .clear, radius: isFocused ? 4 : 0, x: 0, y: 0)
-            .animation(.easeOut(duration: 0.15), value: isFocused)
-            .offset(dragTranslation)
-            .zIndex(isDragging ? 10 : 0)
-            .scaleEffect(isDragging ? 1.05 : 1.0)
-            .shadow(color: isDragging ? Color.black.opacity(0.35) : .clear, radius: isDragging ? 16 : 0)
-            .animation(.spring(duration: 0.25, bounce: 0.1), value: isDragging)
+        return NiriStyledItemView(
+            content: content,
+            isOverviewOpen: layout.isOverviewOpen,
+            isFocused: isFocused,
+            hasTabBar: item.showsTabBar,
+            accentColor: tc.accent,
+            dividerColor: tc.divider,
+            isDragging: isDragging,
+            dragTranslation: dragTranslation
+        )
     }
 
     func niriCanvasItemInteractions<Content: View>(
@@ -285,13 +479,12 @@ extension SessionContainerView {
         hasLowerItemNeighbor: Bool,
         isLastItemInColumn: Bool
     ) -> some View {
-        let hasTopEdge = column.displayMode == .normal && hasUpperItemNeighbor
-        let hasBottomEdge = column.displayMode == .normal && (hasLowerItemNeighbor || isLastItemInColumn)
-
+        // Always show all edges and corners — like macOS window resizing.
+        // Every tile can be resized from any edge or corner regardless of neighbors.
         return content
-            // Edge resize handles
+            // Edge resize handles — all 4 edges always available
             .overlay(alignment: .leading) {
-                if layout.isOverviewOpen, hasLeftColumnNeighbor {
+                if layout.isOverviewOpen {
                     niriColumnResizeEdgeHotzone(
                         sessionID: session.id,
                         workspaceID: workspace.id,
@@ -302,7 +495,7 @@ extension SessionContainerView {
                 }
             }
             .overlay(alignment: .trailing) {
-                if layout.isOverviewOpen, hasRightColumnNeighbor {
+                if layout.isOverviewOpen {
                     niriColumnResizeEdgeHotzone(
                         sessionID: session.id,
                         workspaceID: workspace.id,
@@ -313,7 +506,7 @@ extension SessionContainerView {
                 }
             }
             .overlay(alignment: .top) {
-                if layout.isOverviewOpen, hasTopEdge {
+                if layout.isOverviewOpen {
                     niriItemResizeEdgeHotzone(
                         sessionID: session.id,
                         workspaceID: workspace.id,
@@ -325,7 +518,7 @@ extension SessionContainerView {
                 }
             }
             .overlay(alignment: .bottom) {
-                if layout.isOverviewOpen, hasBottomEdge {
+                if layout.isOverviewOpen {
                     niriItemResizeEdgeHotzone(
                         sessionID: session.id,
                         workspaceID: workspace.id,
@@ -336,9 +529,9 @@ extension SessionContainerView {
                     )
                 }
             }
-            // Corner resize handles — allow simultaneous H+V resize
+            // Corner resize handles — all 4 corners always available
             .overlay(alignment: .topLeading) {
-                if layout.isOverviewOpen, hasLeftColumnNeighbor, hasTopEdge {
+                if layout.isOverviewOpen {
                     niriCornerResizeHotzone(
                         sessionID: session.id,
                         workspaceID: workspace.id,
@@ -351,7 +544,7 @@ extension SessionContainerView {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if layout.isOverviewOpen, hasRightColumnNeighbor, hasTopEdge {
+                if layout.isOverviewOpen {
                     niriCornerResizeHotzone(
                         sessionID: session.id,
                         workspaceID: workspace.id,
@@ -364,7 +557,7 @@ extension SessionContainerView {
                 }
             }
             .overlay(alignment: .bottomLeading) {
-                if layout.isOverviewOpen, hasLeftColumnNeighbor, hasBottomEdge {
+                if layout.isOverviewOpen {
                     niriCornerResizeHotzone(
                         sessionID: session.id,
                         workspaceID: workspace.id,
@@ -377,7 +570,7 @@ extension SessionContainerView {
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                if layout.isOverviewOpen, hasRightColumnNeighbor, hasBottomEdge {
+                if layout.isOverviewOpen {
                     niriCornerResizeHotzone(
                         sessionID: session.id,
                         workspaceID: workspace.id,
@@ -430,5 +623,65 @@ extension SessionContainerView {
         }
 
         return rawTitle
+    }
+}
+
+/// Wrapper view that reads the tab divider size preference and draws the notebook-divider border.
+private struct NiriStyledItemView<Content: View>: View {
+    let content: Content
+    let isOverviewOpen: Bool
+    let isFocused: Bool
+    let hasTabBar: Bool
+    let accentColor: Color
+    let dividerColor: Color
+    let isDragging: Bool
+    let dragTranslation: CGSize
+
+    @State private var tabDividerSize: CGSize = .zero
+
+    var body: some View {
+        content
+            .onPreferenceChange(NiriTabDividerSizeKey.self) { size in
+                tabDividerSize = size
+            }
+            .overlay {
+                if isOverviewOpen {
+                    VStack(spacing: 0) {
+                        Color.clear
+                            .frame(height: 26)
+                            .allowsHitTesting(false)
+                        RoundedRectangle(cornerRadius: 0)
+                            .fill(Color.black.opacity(0.2))
+                            .clipShape(
+                                UnevenRoundedRectangle(
+                                    topLeadingRadius: 0, bottomLeadingRadius: 10,
+                                    bottomTrailingRadius: 10, topTrailingRadius: 0
+                                )
+                            )
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
+            .overlay {
+                if hasTabBar, tabDividerSize.width > 0 {
+                    NiriNotebookDividerShape(
+                        tabWidth: tabDividerSize.width,
+                        tabHeight: tabDividerSize.height
+                    )
+                    .stroke(isFocused ? accentColor.opacity(0.4) : dividerColor.opacity(0.5), lineWidth: 1)
+                    .animation(.easeOut(duration: 0.15), value: isFocused)
+                } else {
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isFocused ? accentColor.opacity(0.4) : dividerColor.opacity(0.5), lineWidth: 1)
+                        .animation(.easeOut(duration: 0.15), value: isFocused)
+                }
+            }
+            .shadow(color: isFocused ? accentColor.opacity(0.1) : .clear, radius: isFocused ? 4 : 0, x: 0, y: 0)
+            .animation(.easeOut(duration: 0.15), value: isFocused)
+            .offset(dragTranslation)
+            .zIndex(isDragging ? 10 : 0)
+            .scaleEffect(isDragging ? 1.05 : 1.0)
+            .shadow(color: isDragging ? Color.black.opacity(0.35) : .clear, radius: isDragging ? 16 : 0)
+            .animation(.spring(duration: 0.25, bounce: 0.1), value: isDragging)
     }
 }

@@ -89,31 +89,26 @@ extension SessionContainerView {
     }
 
     func niriColumnContentHeight(column: NiriColumn, metrics: NiriCanvasMetrics, isOverview: Bool = false) -> CGFloat {
-        switch column.displayMode {
-        case .normal:
-            guard !column.items.isEmpty else { return metrics.tileHeight }
-            let itemsHeight = column.items.reduce(CGFloat.zero) { partial, item in
-                partial + (isOverview
-                    ? niriOverviewItemHeight(column: column, item: item, metrics: metrics)
-                    : niriItemHeight(item: item, metrics: metrics))
-            }
-            let spacing = CGFloat(max(column.items.count - 1, 0)) * metrics.itemSpacing
-            return itemsHeight + spacing
-        case .tabbed:
-            let focusedID = column.focusedItemID ?? column.items.first?.id
-            let focused = column.items.first(where: { $0.id == focusedID }) ?? column.items.first
-            return niriItemHeight(item: focused, metrics: metrics) + 34
+        guard !column.items.isEmpty else { return metrics.tileHeight }
+        let itemsHeight = column.items.reduce(CGFloat.zero) { partial, item in
+            partial + (isOverview
+                ? niriOverviewItemHeight(column: column, item: item, metrics: metrics)
+                : niriItemHeight(item: item, metrics: metrics))
         }
+        let spacing = CGFloat(max(column.items.count - 1, 0)) * metrics.itemSpacing
+        return itemsHeight + spacing
     }
 
     func niriColumnMinWidth(metrics: NiriCanvasMetrics) -> CGFloat {
-        max(260, metrics.tileWidth * 0.45)
+        metrics.tileWidth * 0.2
     }
 
     func niriColumnMaxWidth(metrics: NiriCanvasMetrics) -> CGFloat {
-        max(niriColumnMinWidth(metrics: metrics) + 80, metrics.tileWidth * 2.4)
+        metrics.tileWidth * 4.0
     }
 
+    /// `preferredWidth` is stored as a ratio of the default tile width (1.0 = default).
+    /// This makes tile sizes proportional to the app window size.
     func niriColumnWidth(column: NiriColumn, metrics: NiriCanvasMetrics) -> CGFloat {
         if let zoomedItemID = metrics.zoomedItemID,
            column.items.contains(where: { $0.id == zoomedItemID }) {
@@ -121,28 +116,32 @@ extension SessionContainerView {
         }
         let minWidth = niriColumnMinWidth(metrics: metrics)
         let maxWidth = niriColumnMaxWidth(metrics: metrics)
-        let preferredWidth = column.preferredWidth.map { $0 * metrics.canvasScale }
-        return Swift.max(minWidth, Swift.min(maxWidth, preferredWidth ?? metrics.tileWidth))
+        guard let ratio = column.preferredWidth else {
+            return metrics.tileWidth
+        }
+        return Swift.max(minWidth, Swift.min(maxWidth, ratio * metrics.tileWidth))
     }
 
     func niriItemMinHeight(metrics: NiriCanvasMetrics) -> CGFloat {
-        max(120, metrics.tileHeight * 0.32)
+        metrics.tileHeight * 0.2
     }
 
     func niriItemMaxHeight(metrics: NiriCanvasMetrics) -> CGFloat {
-        max(niriItemMinHeight(metrics: metrics) + 120, metrics.tileHeight * 4.8)
+        metrics.tileHeight * 4.0
     }
 
+    /// `preferredHeight` is stored as a ratio of the default tile height (1.0 = default).
+    /// This makes tile sizes proportional to the app window size.
     func niriItemHeight(item: NiriLayoutItem?, metrics: NiriCanvasMetrics) -> CGFloat {
         if let zoomedItemID = metrics.zoomedItemID, item?.id == zoomedItemID {
-            return max(120, metrics.containerHeight - 12)
+            return max(60, metrics.containerHeight - 12)
         }
         let minHeight = niriItemMinHeight(metrics: metrics)
         let maxHeight = niriItemMaxHeight(metrics: metrics)
-        guard let preferred = item?.preferredHeight else {
-            return Swift.max(minHeight, Swift.min(maxHeight, metrics.tileHeight))
+        guard let ratio = item?.preferredHeight else {
+            return metrics.tileHeight
         }
-        return Swift.max(minHeight, Swift.min(maxHeight, preferred * metrics.canvasScale))
+        return Swift.max(minHeight, Swift.min(maxHeight, ratio * metrics.tileHeight))
     }
 
     /// In overview mode, keep each tile's height stable so adding/removing

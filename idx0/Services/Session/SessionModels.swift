@@ -98,6 +98,35 @@ struct NiriLayoutItem: Identifiable, Equatable {
     let id: UUID
     var ref: NiriItemRef
     var preferredHeight: CGFloat? = nil
+
+    /// For terminal tiles: ordered list of all tab IDs displayed in this tile.
+    /// When non-empty, the tile shows a tab bar and `activeTerminalTabID` determines
+    /// which terminal is visible. When empty, falls back to the single tabID in `ref`.
+    var terminalTabIDs: [UUID] = []
+    var activeTerminalTabID: UUID? = nil
+
+    /// The tab ID that should actually be rendered in this tile.
+    var currentTerminalTabID: UUID? {
+        if !terminalTabIDs.isEmpty {
+            return activeTerminalTabID ?? terminalTabIDs.first
+        }
+        if case .terminal(let tabID) = ref {
+            return tabID
+        }
+        return nil
+    }
+
+    /// Whether this tile should show its own tab bar.
+    /// Shows for any terminal item so the user always has the "+" button to add tabs.
+    var showsTabBar: Bool {
+        if case .terminal = ref { return true }
+        return false
+    }
+
+    /// Whether this tile has more than one tab.
+    var hasMultipleTabs: Bool {
+        terminalTabIDs.count > 1
+    }
 }
 
 struct NiriColumn: Identifiable, Equatable {
@@ -205,6 +234,8 @@ struct PersistedNiriLayoutItem: Codable {
     var id: UUID
     var ref: PersistedNiriItemRef
     var preferredHeight: Double?
+    var terminalTabIDs: [UUID]?
+    var activeTerminalTabID: UUID?
 }
 
 struct PersistedNiriColumn: Codable {

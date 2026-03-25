@@ -164,7 +164,9 @@ extension SessionService {
                             PersistedNiriLayoutItem(
                                 id: item.id,
                                 ref: persistedNiriItemRef(from: item.ref),
-                                preferredHeight: item.preferredHeight.map(Double.init)
+                                preferredHeight: item.preferredHeight.map(Double.init),
+                                terminalTabIDs: item.terminalTabIDs.isEmpty ? nil : item.terminalTabIDs,
+                                activeTerminalTabID: item.activeTerminalTabID
                             )
                         },
                         focusedItemID: column.focusedItemID,
@@ -191,10 +193,19 @@ extension SessionService {
             let restoredColumns: [NiriColumn] = workspace.columns.compactMap { column in
                 let restoredItems: [NiriLayoutItem] = column.items.compactMap { item in
                     guard let ref = restoreNiriItemRef(from: item.ref, validTabIDs: validTabIDs) else { return nil }
+                    let restoredTabIDs = (item.terminalTabIDs ?? []).filter { validTabIDs.contains($0) }
+                    let restoredActiveTabID: UUID? = {
+                        if let active = item.activeTerminalTabID, restoredTabIDs.contains(active) {
+                            return active
+                        }
+                        return nil
+                    }()
                     return NiriLayoutItem(
                         id: item.id,
                         ref: ref,
-                        preferredHeight: item.preferredHeight.map { CGFloat($0) }
+                        preferredHeight: item.preferredHeight.map { CGFloat($0) },
+                        terminalTabIDs: restoredTabIDs,
+                        activeTerminalTabID: restoredActiveTabID
                     )
                 }
                 guard !restoredItems.isEmpty else { return nil }
@@ -451,15 +462,67 @@ extension SessionService {
     }
 
     func normalizeNiriLayout(_ layout: inout NiriCanvasLayout) {
+        // Migrate .tabbed columns: merge multiple items into a single item with terminalTabIDs
+        for workspaceIndex in layout.workspaces.indices {
+            for columnIndex in layout.workspaces[workspaceIndex].columns.indices {
+                var column = layout.workspaces[workspaceIndex].columns[columnIndex]
+                if column.displayMode == .tabbed, column.items.count > 1 {
+                    let terminalTabIDs: [UUID] = column.items.compactMap { item in
+                        if case .terminal(let tabID) = item.ref { return tabID }
+                        return nil
+                    }
+                    if terminalTabIDs.count == column.items.count, let first = column.items.first {
+                        // All items are terminals — merge into the first item
+                        let activeTabID: UUID? = {
+                            if let focusedID = column.focusedItemID,
+                               let focusedItem = column.items.first(where: { $0.id == focusedID }),
+                               case .terminal(let tabID) = focusedItem.ref {
+                                return tabID
+                            }
+                            return terminalTabIDs.first
+                        }()
+                        var merged = first
+                        merged.terminalTabIDs = terminalTabIDs
+                        merged.activeTerminalTabID = activeTabID
+                        if let activeTabID {
+                            merged.ref = .terminal(tabID: activeTabID)
+                        }
+                        column.items = [merged]
+                        column.focusedItemID = merged.id
+                        column.displayMode = .normal
+                        layout.workspaces[workspaceIndex].columns[columnIndex] = column
+                    }
+                }
+            }
+        }
+
+        // Backfill terminalTabIDs for items that have empty arrays (pre-migration items)
+        for workspaceIndex in layout.workspaces.indices {
+            for columnIndex in layout.workspaces[workspaceIndex].columns.indices {
+                for itemIndex in layout.workspaces[workspaceIndex].columns[columnIndex].items.indices {
+                    var item = layout.workspaces[workspaceIndex].columns[columnIndex].items[itemIndex]
+                    if case .terminal(let tabID) = item.ref, item.terminalTabIDs.isEmpty {
+                        item.terminalTabIDs = [tabID]
+                        item.activeTerminalTabID = tabID
+                        layout.workspaces[workspaceIndex].columns[columnIndex].items[itemIndex] = item
+                    }
+                }
+            }
+        }
+
         for workspaceIndex in layout.workspaces.indices {
             layout.workspaces[workspaceIndex].columns.removeAll(where: { $0.items.isEmpty })
             for columnIndex in layout.workspaces[workspaceIndex].columns.indices {
                 if let preferredWidth = layout.workspaces[workspaceIndex].columns[columnIndex].preferredWidth {
-                    layout.workspaces[workspaceIndex].columns[columnIndex].preferredWidth = max(180, min(preferredWidth, 2400))
+                    // Stored as ratio (1.0 = default). Migrate legacy absolute values (>10) to ratio.
+                    let ratio = preferredWidth > 10 ? 1.0 : preferredWidth
+                    layout.workspaces[workspaceIndex].columns[columnIndex].preferredWidth = max(0.1, min(ratio, 5.0))
                 }
                 for itemIndex in layout.workspaces[workspaceIndex].columns[columnIndex].items.indices {
                     if let preferredHeight = layout.workspaces[workspaceIndex].columns[columnIndex].items[itemIndex].preferredHeight {
-                        layout.workspaces[workspaceIndex].columns[columnIndex].items[itemIndex].preferredHeight = max(120, min(preferredHeight, 2400))
+                        // Stored as ratio (1.0 = default). Migrate legacy absolute values (>10) to ratio.
+                        let ratio = preferredHeight > 10 ? 1.0 : preferredHeight
+                        layout.workspaces[workspaceIndex].columns[columnIndex].items[itemIndex].preferredHeight = max(0.1, min(ratio, 5.0))
                     }
                 }
                 if let focused = layout.workspaces[workspaceIndex].columns[columnIndex].focusedItemID,
@@ -523,10 +586,18 @@ extension SessionService {
     }
 
     func makeNiriLayoutItem(id: UUID, ref: NiriItemRef) -> NiriLayoutItem {
-        NiriLayoutItem(
+        let tabIDs: [UUID]
+        if case .terminal(let tabID) = ref {
+            tabIDs = [tabID]
+        } else {
+            tabIDs = []
+        }
+        return NiriLayoutItem(
             id: id,
             ref: ref,
-            preferredHeight: niriDefaultNewTileHeight()
+            preferredHeight: niriDefaultNewTileHeight(),
+            terminalTabIDs: tabIDs,
+            activeTerminalTabID: tabIDs.first
         )
     }
 
@@ -542,12 +613,16 @@ extension SessionService {
 
     func niriDefaultNewColumnWidth() -> CGFloat? {
         guard let configured = settings.niri.defaultNewColumnWidth else { return nil }
-        return max(180, min(CGFloat(configured), 2400))
+        // If legacy absolute value (>10), treat as default ratio
+        let ratio = CGFloat(configured) > 10 ? 1.0 : CGFloat(configured)
+        return max(0.1, min(ratio, 5.0))
     }
 
     func niriDefaultNewTileHeight() -> CGFloat? {
         guard let configured = settings.niri.defaultNewTileHeight else { return nil }
-        return max(120, min(CGFloat(configured), 2400))
+        // If legacy absolute value (>10), treat as default ratio
+        let ratio = CGFloat(configured) > 10 ? 1.0 : CGFloat(configured)
+        return max(0.1, min(ratio, 5.0))
     }
 
     func clearNiriFocusedTileZoomIfInvalid(sessionID: UUID, layout: NiriCanvasLayout) {
@@ -568,7 +643,11 @@ extension SessionService {
                 .sorted { $0.column < $1.column }
             var columns: [NiriColumn] = []
             for cell in rowCells {
-                let item = NiriLayoutItem(id: cell.id, ref: cell.item)
+                var item = NiriLayoutItem(id: cell.id, ref: cell.item)
+                if case .terminal(let tabID) = cell.item {
+                    item.terminalTabIDs = [tabID]
+                    item.activeTerminalTabID = tabID
+                }
                 columns.append(
                     NiriColumn(
                         id: UUID(),
@@ -589,11 +668,26 @@ extension SessionService {
         guard var layout = niriLayoutsBySession[sessionID] else { return }
         for workspaceIndex in layout.workspaces.indices {
             for columnIndex in layout.workspaces[workspaceIndex].columns.indices {
-                layout.workspaces[workspaceIndex].columns[columnIndex].items.removeAll {
-                    if case .terminal(let existingTabID) = $0.ref {
-                        return existingTabID == tabID
+                for itemIndex in layout.workspaces[workspaceIndex].columns[columnIndex].items.indices.reversed() {
+                    var item = layout.workspaces[workspaceIndex].columns[columnIndex].items[itemIndex]
+                    // Remove from terminalTabIDs if present
+                    if item.terminalTabIDs.contains(tabID) {
+                        item.terminalTabIDs.removeAll { $0 == tabID }
+                        if item.activeTerminalTabID == tabID {
+                            item.activeTerminalTabID = item.terminalTabIDs.first
+                        }
+                        if item.terminalTabIDs.isEmpty {
+                            // No tabs left — remove the entire item
+                            layout.workspaces[workspaceIndex].columns[columnIndex].items.remove(at: itemIndex)
+                        } else {
+                            // Update ref to point to the new active tab
+                            item.ref = .terminal(tabID: item.terminalTabIDs.first!)
+                            layout.workspaces[workspaceIndex].columns[columnIndex].items[itemIndex] = item
+                        }
+                    } else if case .terminal(let existingTabID) = item.ref, existingTabID == tabID {
+                        // Legacy item with no terminalTabIDs — remove entirely
+                        layout.workspaces[workspaceIndex].columns[columnIndex].items.remove(at: itemIndex)
                     }
-                    return false
                 }
             }
         }
@@ -602,6 +696,7 @@ extension SessionService {
            !layout.workspaces.contains(where: { workspace in
                workspace.columns.contains(where: { column in
                    column.items.contains(where: { item in
+                       if item.terminalTabIDs.contains(selectedTabID) { return true }
                        if case .terminal(let existingTabID) = item.ref {
                            return existingTabID == selectedTabID
                        }
@@ -673,19 +768,24 @@ extension SessionService {
     }
 
     func syncNiriFocusWithSelectedTab(sessionID: UUID) {
+        print("[NIRI-TAB-DEBUG] syncNiriFocusWithSelectedTab called")
+        Thread.callStackSymbols.prefix(8).forEach { print("  \($0)") }
         guard let selectedTabID = selectedTabIDBySession[sessionID],
               var layout = niriLayoutsBySession[sessionID]
         else { return }
 
+        // Check if any tile contains this tab (either in terminalTabIDs or as the ref)
         if let item = layout.workspaces
             .flatMap(\.columns)
             .flatMap(\.items)
-            .first(where: {
-                if case .terminal(let existingTabID) = $0.ref {
+            .first(where: { item in
+                if item.terminalTabIDs.contains(selectedTabID) { return true }
+                if case .terminal(let existingTabID) = item.ref {
                     return existingTabID == selectedTabID
                 }
                 return false
             }) {
+            print("[NIRI-TAB-DEBUG] syncNiriFocusWithSelectedTab: found item \(item.id.uuidString.prefix(8)) for tab \(selectedTabID.uuidString.prefix(8)), calling niriSelectItem")
             niriLayoutsBySession[sessionID] = layout
             niriSelectItem(sessionID: sessionID, itemID: item.id)
             return

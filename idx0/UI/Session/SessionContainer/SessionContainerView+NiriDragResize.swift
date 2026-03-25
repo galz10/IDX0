@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 import WebKit
 
 extension SessionContainerView {
+    /// Corner hit zone size — edges are inset by this amount so cursors don't conflict.
+    private static let cornerHitSize: CGFloat = 14
+
     func niriColumnResizeEdgeHotzone(
         sessionID: UUID,
         workspaceID: UUID,
@@ -12,6 +15,7 @@ extension SessionContainerView {
         edge: NiriEdgeAlignment
     ) -> some View {
         let hitWidth: CGFloat = 14
+        let cornerInset = Self.cornerHitSize
         return NiriResizeEdgeHandle(
             axis: .horizontal,
             onBegin: {
@@ -38,6 +42,7 @@ extension SessionContainerView {
         )
         .frame(width: hitWidth)
         .frame(maxHeight: .infinity)
+        .padding(.vertical, cornerInset) // leave room for corner handles
         .contentShape(Rectangle())
         .offset(x: edge == .leading ? -hitWidth / 2 : hitWidth / 2)
     }
@@ -51,6 +56,7 @@ extension SessionContainerView {
         edge: NiriVerticalEdgeAlignment
     ) -> some View {
         let hitHeight: CGFloat = 14
+        let cornerInset = Self.cornerHitSize
         return NiriResizeEdgeHandle(
             axis: .vertical,
             onBegin: {
@@ -79,6 +85,7 @@ extension SessionContainerView {
         )
         .frame(height: hitHeight)
         .frame(maxWidth: .infinity)
+        .padding(.horizontal, cornerInset) // leave room for corner handles
         .contentShape(Rectangle())
         .offset(y: edge == .top ? -hitHeight / 2 : hitHeight / 2)
     }
@@ -91,7 +98,7 @@ extension SessionContainerView {
         metrics: NiriCanvasMetrics,
         corner: NiriCornerPosition
     ) -> some View {
-        let hitSize: CGFloat = 16
+        let hitSize = Self.cornerHitSize
         return NiriResizeCornerHandle(
             corner: corner,
             onBegin: {
@@ -523,14 +530,15 @@ extension SessionContainerView {
         let minWidth = niriColumnMinWidth(metrics: metrics)
         let maxWidth = niriColumnMaxWidth(metrics: metrics)
         let target = max(minWidth, min(maxWidth, current + delta))
-        let canonicalTarget = target / max(metrics.canvasScale, 0.0001)
 
         guard abs(target - current) > 0.01 else { return }
+        // Store as ratio of default tile width so sizes scale with the window
+        let ratio = target / max(metrics.tileWidth, 1)
         sessionService.niriSetColumnWidth(
             sessionID: sessionID,
             workspaceID: workspaceID,
             columnID: columnID,
-            width: canonicalTarget
+            width: ratio
         )
     }
 
@@ -554,15 +562,16 @@ extension SessionContainerView {
         let minHeight = niriItemMinHeight(metrics: metrics)
         let maxHeight = niriItemMaxHeight(metrics: metrics)
         let target = max(minHeight, min(maxHeight, current + delta))
-        let canonicalTarget = target / max(metrics.canvasScale, 0.0001)
 
         guard abs(target - current) > 0.01 else { return }
+        // Store as ratio of default tile height so sizes scale with the window
+        let ratio = target / max(metrics.tileHeight, 1)
         sessionService.niriSetItemHeight(
             sessionID: sessionID,
             workspaceID: workspaceID,
             columnID: columnID,
             itemID: itemID,
-            height: canonicalTarget
+            height: ratio
         )
     }
 

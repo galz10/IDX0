@@ -114,104 +114,41 @@ extension SessionContainerView {
     ) -> some View {
         let columnWidth = niriColumnWidth(column: column, metrics: metrics)
 
-        switch column.displayMode {
-        case .normal:
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(column.items.enumerated()), id: \.element.id) { itemIndex, item in
-                    let itemHeight = layout.isOverviewOpen
-                        ? niriOverviewItemHeight(column: column, item: item, metrics: metrics)
-                        : niriItemHeight(item: item, metrics: metrics)
-                    niriCanvasItemView(
-                        session: session,
-                        layout: layout,
-                        workspace: workspace,
-                        workspaceIndex: workspaceIndex,
-                        column: column,
-                        columnIndex: columnIndex,
-                        item: item,
-                        metrics: metrics,
-                        itemHeight: itemHeight
-                    )
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(column.items.enumerated()), id: \.element.id) { itemIndex, item in
+                let itemHeight = layout.isOverviewOpen
+                    ? niriOverviewItemHeight(column: column, item: item, metrics: metrics)
+                    : niriItemHeight(item: item, metrics: metrics)
+                niriCanvasItemView(
+                    session: session,
+                    layout: layout,
+                    workspace: workspace,
+                    workspaceIndex: workspaceIndex,
+                    column: column,
+                    columnIndex: columnIndex,
+                    item: item,
+                    metrics: metrics,
+                    itemHeight: itemHeight
+                )
 
-                    if itemIndex < column.items.count - 1 {
-                        if layout.isOverviewOpen {
-                            niriItemResizeHandle(
-                                sessionID: session.id,
-                                workspace: workspace,
-                                column: column,
-                                upperItem: item,
-                                lowerItem: column.items[itemIndex + 1],
-                                metrics: metrics
-                            )
-                        } else {
-                            Spacer()
-                                .frame(height: 5)
-                        }
+                if itemIndex < column.items.count - 1 {
+                    if layout.isOverviewOpen {
+                        niriItemResizeHandle(
+                            sessionID: session.id,
+                            workspace: workspace,
+                            column: column,
+                            upperItem: item,
+                            lowerItem: column.items[itemIndex + 1],
+                            metrics: metrics
+                        )
+                    } else {
+                        Spacer()
+                            .frame(height: 5)
                     }
                 }
-            }
-            .animation(.spring(duration: 0.55, bounce: 0.12), value: column.items.map(\.id))
-            .frame(width: columnWidth)
-        case .tabbed:
-            let focusedItemID = column.focusedItemID ?? column.items.first?.id
-            VStack(spacing: 0) {
-                HStack(spacing: 4) {
-                    ForEach(column.items) { item in
-                        let isSelected = item.id == focusedItemID
-                        Button {
-                            sessionService.niriSelectItem(sessionID: session.id, itemID: item.id)
-                        } label: {
-                            Text(niriItemTitle(sessionID: session.id, item: item))
-                                .font(.system(size: 9, weight: .medium))
-                                .lineLimit(1)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 4)
-                                .background(
-                                    isSelected ? tc.surface1 : tc.surface0.opacity(0.7),
-                                    in: RoundedRectangle(cornerRadius: 4)
-                                )
-                                .foregroundStyle(isSelected ? tc.primaryText : tc.secondaryText)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 5)
-                .background(tc.surface0.opacity(0.75))
-
-                if let focusedItem = column.items.first(where: { $0.id == focusedItemID }) {
-                    niriCanvasItemView(
-                        session: session,
-                        layout: layout,
-                        workspace: workspace,
-                        workspaceIndex: workspaceIndex,
-                        column: column,
-                        columnIndex: columnIndex,
-                        item: focusedItem,
-                        metrics: metrics,
-                        itemHeight: niriItemHeight(item: focusedItem, metrics: metrics)
-                    )
-                } else if let first = column.items.first {
-                    niriCanvasItemView(
-                        session: session,
-                        layout: layout,
-                        workspace: workspace,
-                        workspaceIndex: workspaceIndex,
-                        column: column,
-                        columnIndex: columnIndex,
-                        item: first,
-                        metrics: metrics,
-                        itemHeight: niriItemHeight(item: first, metrics: metrics)
-                    )
-                }
-            }
-            .frame(width: columnWidth)
-            .background(tc.surface0.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(tc.divider.opacity(0.8), lineWidth: 1)
             }
         }
+        .animation(.spring(duration: 0.55, bounce: 0.12), value: column.items.map(\.id))
+        .frame(width: columnWidth)
     }
 }

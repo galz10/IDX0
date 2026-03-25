@@ -23,11 +23,39 @@ extension SessionService {
         niriSelectItem(sessionID: sessionID, itemID: cellID)
     }
 
+    /// Switch the focused item within a column without moving the camera.
+    /// Used by tabbed columns to switch tabs in overview without navigating.
+    func niriFocusItemInColumn(sessionID: UUID, columnID: UUID, itemID: UUID) {
+        ensureNiriLayout(for: sessionID)
+        guard var layout = niriLayoutsBySession[sessionID],
+              let path = findNiriItemPath(layout: layout, itemID: itemID) else { return }
+
+        layout.workspaces[path.workspaceIndex].columns[path.columnIndex].focusedItemID = itemID
+        niriLayoutsBySession[sessionID] = layout
+
+        // Prime the terminal controller if needed.
+        // Important: we set selectedTabIDBySession directly instead of calling
+        // selectTab(), because selectTab triggers syncNiriFocusWithSelectedTab
+        // which calls niriSelectItem and moves the camera/workspace.
+        let item = layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex]
+        switch item.ref {
+        case .terminal(let tabID):
+            if selectedTabID(for: sessionID) != tabID {
+                selectedTabIDBySession[sessionID] = tabID
+                syncActivePaneState(for: sessionID)
+            }
+            niriPrimeTabController(sessionID: sessionID, tabID: tabID)
+        default:
+            break
+        }
+    }
+
     func niriSelectItem(sessionID: UUID, itemID: UUID) {
         ensureNiriLayout(for: sessionID)
         guard var layout = niriLayoutsBySession[sessionID],
               let path = findNiriItemPath(layout: layout, itemID: itemID) else { return }
 
+        let prevWorkspaceID = layout.camera.activeWorkspaceID
         var column = layout.workspaces[path.workspaceIndex].columns[path.columnIndex]
         column.focusedItemID = itemID
         layout.workspaces[path.workspaceIndex].columns[path.columnIndex] = column
@@ -39,9 +67,16 @@ extension SessionService {
         layout.camera.focusedItemID = itemID
         niriLayoutsBySession[sessionID] = layout
 
+        if prevWorkspaceID != workspaceID {
+            print("[NIRI-TAB-DEBUG] niriSelectItem: workspace changed from \(String(describing: prevWorkspaceID?.uuidString.prefix(8))) to \(workspaceID.uuidString.prefix(8)) for item \(itemID.uuidString.prefix(8))")
+            Thread.callStackSymbols.prefix(10).forEach { print("  \($0)") }
+        }
+
         switch column.items[path.itemIndex].ref {
         case .terminal(let tabID):
+            print("[NIRI-TAB-DEBUG] niriSelectItem: terminal tab=\(tabID.uuidString.prefix(8)), selectedTab=\(String(describing: selectedTabID(for: sessionID)?.uuidString.prefix(8))), workspace=\(path.workspaceIndex)")
             if selectedTabID(for: sessionID) != tabID {
+                print("[NIRI-TAB-DEBUG] niriSelectItem: calling selectTab (tab mismatch)")
                 selectTab(sessionID: sessionID, tabID: tabID)
             }
             niriPrimeTabController(sessionID: sessionID, tabID: tabID)
@@ -121,6 +156,139 @@ extension SessionService {
         niriSelectItem(sessionID: sessionID, itemID: itemID)
         markTerminalFocused(for: sessionID)
         return itemID
+    }
+
+    /// Add a new terminal tab to a specific column (legacy — now forwards to tile-level tabs).
+    @discardableResult
+    func niriAddTerminalToColumn(
+        sessionID: UUID,
+        workspaceID: UUID,
+        columnID: UUID
+    ) -> UUID? {
+        ensureNiriLayout(for: sessionID)
+        guard let layout = niriLayoutsBySession[sessionID],
+              let workspaceIndex = layout.workspaces.firstIndex(where: { $0.id == workspaceID }),
+              let columnIndex = layout.workspaces[workspaceIndex].columns.firstIndex(where: { $0.id == columnID })
+        else { return nil }
+
+        // Find the focused item in the column to add the tab to
+        let column = layout.workspaces[workspaceIndex].columns[columnIndex]
+        let targetItemID = column.focusedItemID ?? column.items.first?.id
+        guard let itemID = targetItemID else { return nil }
+        return niriAddTabToTile(sessionID: sessionID, itemID: itemID)
+    }
+
+    // MARK: - Tile-level Tabs
+
+    /// Add a new terminal tab to an existing terminal tile.
+    @discardableResult
+    func niriAddTabToTile(sessionID: UUID, itemID: UUID) -> UUID? {
+        ensureNiriLayout(for: sessionID)
+        guard var layout = niriLayoutsBySession[sessionID],
+              let path = findNiriItemPath(layout: layout, itemID: itemID)
+        else { return nil }
+
+        var item = layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex]
+        guard case .terminal = item.ref else { return nil }
+
+        guard let tabID = createTab(in: sessionID, activate: false) else { return nil }
+        niriPrimeTabController(sessionID: sessionID, tabID: tabID)
+
+        item.terminalTabIDs.append(tabID)
+        item.activeTerminalTabID = tabID
+        item.ref = .terminal(tabID: tabID)
+        layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex] = item
+
+        niriLayoutsBySession[sessionID] = layout
+
+        // Sync the session's selected tab
+        selectedTabIDBySession[sessionID] = tabID
+        syncActivePaneState(for: sessionID)
+        markTerminalFocused(for: sessionID)
+        return tabID
+    }
+
+    /// Switch which tab is visible in a terminal tile. Does NOT move camera/workspace.
+    func niriSwitchTabInTile(sessionID: UUID, itemID: UUID, tabID: UUID) {
+        print("[NIRI-TAB-DEBUG] niriSwitchTabInTile: item=\(itemID.uuidString.prefix(8)), tab=\(tabID.uuidString.prefix(8))")
+        ensureNiriLayout(for: sessionID)
+        guard var layout = niriLayoutsBySession[sessionID],
+              let path = findNiriItemPath(layout: layout, itemID: itemID)
+        else {
+            print("[NIRI-TAB-DEBUG] niriSwitchTabInTile: item not found!")
+            return
+        }
+
+        var item = layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex]
+        print("[NIRI-TAB-DEBUG] niriSwitchTabInTile: terminalTabIDs=\(item.terminalTabIDs.map { $0.uuidString.prefix(8) }), activeTab=\(String(describing: item.activeTerminalTabID?.uuidString.prefix(8)))")
+        guard item.terminalTabIDs.contains(tabID) else {
+            print("[NIRI-TAB-DEBUG] niriSwitchTabInTile: tabID not in terminalTabIDs!")
+            return
+        }
+
+        item.activeTerminalTabID = tabID
+        item.ref = .terminal(tabID: tabID)
+        layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex] = item
+        niriLayoutsBySession[sessionID] = layout
+
+        // Sync the session's selected tab without triggering workspace navigation
+        selectedTabIDBySession[sessionID] = tabID
+        syncActivePaneState(for: sessionID)
+        niriPrimeTabController(sessionID: sessionID, tabID: tabID)
+        markTerminalFocused(for: sessionID)
+        print("[NIRI-TAB-DEBUG] niriSwitchTabInTile: done, workspace=\(path.workspaceIndex)")
+    }
+
+    /// Close a specific tab within a terminal tile.
+    func niriCloseTabInTile(sessionID: UUID, itemID: UUID, tabID: UUID) {
+        ensureNiriLayout(for: sessionID)
+        guard var layout = niriLayoutsBySession[sessionID],
+              let path = findNiriItemPath(layout: layout, itemID: itemID)
+        else { return }
+
+        var item = layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex]
+        guard item.terminalTabIDs.contains(tabID) else { return }
+
+        item.terminalTabIDs.removeAll { $0 == tabID }
+
+        if item.terminalTabIDs.isEmpty {
+            // Last tab — close the entire tile
+            niriLayoutsBySession[sessionID] = layout
+            closeNiriItem(sessionID: sessionID, itemID: itemID)
+            return
+        }
+
+        // Switch to another tab if we closed the active one
+        let wasActive = item.activeTerminalTabID == tabID
+        if wasActive {
+            item.activeTerminalTabID = item.terminalTabIDs.first
+        }
+        if let newTabID = item.currentTerminalTabID {
+            item.ref = .terminal(tabID: newTabID)
+        }
+        layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex] = item
+        niriLayoutsBySession[sessionID] = layout
+
+        // Clean up the closed tab's controllers directly — avoid selectTab/closeActiveTab
+        // which trigger syncNiriFocusWithSelectedTab and cause unwanted navigation.
+        if let tabIndex = tabsBySession[sessionID]?.firstIndex(where: { $0.id == tabID }) {
+            let closingTab = tabsBySession[sessionID]![tabIndex]
+            for controllerID in Set(closingTab.allControllerIDs) {
+                runtimeControllers[controllerID]?.terminate()
+                runtimeControllers.removeValue(forKey: controllerID)
+                ownerSessionIDByControllerID.removeValue(forKey: controllerID)
+                clearLaunchTracking(for: controllerID)
+            }
+            tabsBySession[sessionID]?.remove(at: tabIndex)
+        }
+
+        // Point selected tab to the new active tab in this tile (no navigation)
+        if let newTabID = item.currentTerminalTabID {
+            selectedTabIDBySession[sessionID] = newTabID
+            syncActivePaneState(for: sessionID)
+            niriPrimeTabController(sessionID: sessionID, tabID: newTabID)
+            markTerminalFocused(for: sessionID)
+        }
     }
 
     func niriPrimeTabController(sessionID: UUID, tabID: UUID) {
@@ -376,9 +544,14 @@ extension SessionService {
         switch item.ref {
         case .terminal:
             guard let tabs = tabsBySession[sessionID], tabs.count > 1 else { return }
-            // Focus this item first so closeActiveTab removes the right one
-            niriSelectItem(sessionID: sessionID, itemID: itemID)
-            closeActiveTab(in: sessionID)
+            // If tile has multiple tabs, close only the active tab
+            if item.hasMultipleTabs, let activeTabID = item.currentTerminalTabID {
+                niriCloseTabInTile(sessionID: sessionID, itemID: itemID, tabID: activeTabID)
+            } else {
+                // Single-tab tile: focus then close
+                niriSelectItem(sessionID: sessionID, itemID: itemID)
+                closeActiveTab(in: sessionID)
+            }
         case .browser:
             removeNiriItem(sessionID: sessionID, itemID: itemID)
         case .app:
@@ -395,12 +568,17 @@ extension SessionService {
 
         let item = layout.workspaces[path.workspaceIndex].columns[path.columnIndex].items[path.itemIndex]
         switch item.ref {
-        case .terminal(let tabID):
+        case .terminal:
             guard let tabs = tabsBySession[sessionID], tabs.count > 1 else { return }
-            if selectedTabID(for: sessionID) != tabID {
-                selectTab(sessionID: sessionID, tabID: tabID)
+            if item.hasMultipleTabs, let activeTabID = item.currentTerminalTabID {
+                niriCloseTabInTile(sessionID: sessionID, itemID: focusedItemID, tabID: activeTabID)
+            } else {
+                let tabID = item.currentTerminalTabID
+                if let tabID, selectedTabID(for: sessionID) != tabID {
+                    selectTab(sessionID: sessionID, tabID: tabID)
+                }
+                closeActiveTab(in: sessionID)
             }
-            closeActiveTab(in: sessionID)
         case .browser:
             removeNiriItem(sessionID: sessionID, itemID: focusedItemID)
         case .app:
@@ -423,8 +601,8 @@ extension SessionService {
               let rightColumnIndex = layout.workspaces[workspaceIndex].columns.firstIndex(where: { $0.id == rightColumnID })
         else { return }
 
-        let clampedLeft = max(180, min(leftWidth, 2400))
-        let clampedRight = max(180, min(rightWidth, 2400))
+        let clampedLeft = max(0.1, min(leftWidth, 5.0))
+        let clampedRight = max(0.1, min(rightWidth, 5.0))
         layout.workspaces[workspaceIndex].columns[leftColumnIndex].preferredWidth = clampedLeft
         layout.workspaces[workspaceIndex].columns[rightColumnIndex].preferredWidth = clampedRight
         niriLayoutsBySession[sessionID] = layout
@@ -442,7 +620,7 @@ extension SessionService {
               let columnIndex = layout.workspaces[workspaceIndex].columns.firstIndex(where: { $0.id == columnID })
         else { return }
 
-        layout.workspaces[workspaceIndex].columns[columnIndex].preferredWidth = max(180, min(width, 2400))
+        layout.workspaces[workspaceIndex].columns[columnIndex].preferredWidth = max(0.1, min(width, 5.0))
         niriLayoutsBySession[sessionID] = layout
     }
 
@@ -463,8 +641,8 @@ extension SessionService {
               let lowerItemIndex = layout.workspaces[workspaceIndex].columns[columnIndex].items.firstIndex(where: { $0.id == lowerItemID })
         else { return }
 
-        let clampedUpper = max(120, min(upperHeight, 2400))
-        let clampedLower = max(120, min(lowerHeight, 2400))
+        let clampedUpper = max(0.1, min(upperHeight, 5.0))
+        let clampedLower = max(0.1, min(lowerHeight, 5.0))
         layout.workspaces[workspaceIndex].columns[columnIndex].items[upperItemIndex].preferredHeight = clampedUpper
         layout.workspaces[workspaceIndex].columns[columnIndex].items[lowerItemIndex].preferredHeight = clampedLower
         niriLayoutsBySession[sessionID] = layout
@@ -484,7 +662,7 @@ extension SessionService {
               let itemIndex = layout.workspaces[workspaceIndex].columns[columnIndex].items.firstIndex(where: { $0.id == itemID })
         else { return }
 
-        layout.workspaces[workspaceIndex].columns[columnIndex].items[itemIndex].preferredHeight = max(120, min(height, 2400))
+        layout.workspaces[workspaceIndex].columns[columnIndex].items[itemIndex].preferredHeight = max(0.1, min(height, 5.0))
         niriLayoutsBySession[sessionID] = layout
     }
 
