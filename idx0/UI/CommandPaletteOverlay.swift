@@ -4,6 +4,7 @@ struct CommandPaletteOverlay: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @EnvironmentObject private var sessionService: SessionService
     @EnvironmentObject private var workflowService: WorkflowService
+    @EnvironmentObject private var appUpdateService: AppUpdateService
     @Environment(\.themeColors) private var tc
 
     @FocusState private var queryFocused: Bool
@@ -316,6 +317,16 @@ struct CommandPaletteOverlay: View {
                 shortcut: shortcutLabel(.openSettings), searchText: "open settings preferences",
                 isEnabled: true,
                 run: { _ = coordinator.performCommand(.openSettings) }
+            ),
+            PaletteAction(
+                id: "check-for-updates",
+                icon: "arrow.triangle.2.circlepath",
+                title: appUpdateService.primaryActionTitle ?? "Check for Updates",
+                detail: appUpdateService.statusDescription,
+                shortcut: shortcutLabel(.checkForUpdates),
+                searchText: "check updates download install retry",
+                isEnabled: appUpdateService.canPerformPrimaryAction,
+                run: { _ = coordinator.performCommand(.checkForUpdates) }
             ),
         ]
 

@@ -15,6 +15,7 @@ enum ShortcutActionID: String, Codable, CaseIterable, Hashable {
     case commandPalette
     case keyboardShortcuts
     case openSettings
+    case checkForUpdates
 
     // Navigation
     case toggleSidebar

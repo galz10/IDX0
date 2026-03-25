@@ -107,4 +107,12 @@ final class ShortcutRegistryTests: XCTestCase {
 
         XCTAssertFalse(conflicts.isEmpty)
     }
+
+    func testCheckForUpdatesActionIsRegistered() {
+        let registry = ShortcutRegistry.shared
+        let descriptor = registry.descriptor(for: .checkForUpdates)
+
+        XCTAssertEqual(descriptor?.title, "Check for Updates")
+        XCTAssertNil(registry.primaryBinding(for: .checkForUpdates, settings: AppSettings()))
+    }
 }

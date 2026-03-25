@@ -25,6 +25,7 @@ final class AppCoordinator: ObservableObject {
     let terminalMonitor = TerminalMonitorService()
     let autoCheckpointService: AutoCheckpointService
     let shellPool = ShellPoolService()
+    let appUpdateService: AppUpdateService
 
     private var ipcServer: IPCServer?
     private let ipcCommandRouter: IPCCommandRouter
@@ -82,6 +83,18 @@ final class AppCoordinator: ObservableObject {
             self.autoCheckpointService = AutoCheckpointService(
                 gitService: gitService,
                 storageURL: paths.appSupportDirectory.appendingPathComponent("auto-checkpoints.json", isDirectory: false)
+            )
+            let environmentProvider = ProcessEnvironmentProvider()
+            let updateDriver = SparkleUpdateDriver(environment: environmentProvider)
+            let sessionServiceForUpdates = self.sessionService
+            self.appUpdateService = AppUpdateService(
+                driver: updateDriver,
+                scheduler: TimerUpdateScheduler(),
+                versionProvider: BundleAppVersionProvider(),
+                environment: environmentProvider,
+                autoCheckEnabledProvider: {
+                    sessionServiceForUpdates.settings.autoCheckForUpdates
+                }
             )
 
             // Configure terminal monitor

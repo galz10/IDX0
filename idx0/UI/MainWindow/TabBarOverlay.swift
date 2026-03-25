@@ -5,6 +5,7 @@ import SwiftUI
 struct TabBarOverlay: View {
     @EnvironmentObject private var sessionService: SessionService
     @EnvironmentObject private var coordinator: AppCoordinator
+    @EnvironmentObject private var appUpdateService: AppUpdateService
     @Environment(\.themeColors) private var tc
 
     @State private var isHovering = false
@@ -20,6 +21,34 @@ struct TabBarOverlay: View {
                 Color.clear
                     .frame(width: 8, height: 28)
             }
+
+            Button {
+                appUpdateService.performPrimaryAction()
+            } label: {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(updateIndicatorColor)
+                        .frame(width: 7, height: 7)
+
+                    if appUpdateService.state.status == .checking || appUpdateService.state.status == .downloading {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .scaleEffect(0.55)
+                            .frame(width: 8, height: 8)
+                    } else {
+                        Image(systemName: updateIconName)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(isHovering ? tc.secondaryText : tc.mutedText)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(tc.surface0.opacity(0.8), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(!appUpdateService.canPerformPrimaryAction)
+            .help(updateButtonHelp)
+            .padding(.trailing, 6)
 
             // Session info
             if let session = sessionService.selectedSession {
@@ -143,5 +172,41 @@ struct TabBarOverlay: View {
             }
         }
     }
-}
 
+    private var updateIndicatorColor: Color {
+        switch appUpdateService.state.status {
+        case .disabled:
+            return .gray.opacity(0.55)
+        case .idle, .upToDate:
+            return .mint.opacity(0.8)
+        case .checking:
+            return .blue.opacity(0.85)
+        case .available:
+            return .orange
+        case .downloading:
+            return .blue
+        case .downloaded:
+            return .green
+        case .error:
+            return .red
+        }
+    }
+
+    private var updateIconName: String {
+        switch appUpdateService.state.status {
+        case .downloaded:
+            return "arrow.down.app.fill"
+        case .error:
+            return "exclamationmark.triangle"
+        default:
+            return "arrow.triangle.2.circlepath"
+        }
+    }
+
+    private var updateButtonHelp: String {
+        guard let actionTitle = appUpdateService.primaryActionTitle else {
+            return appUpdateService.statusDescription
+        }
+        return "\(actionTitle) • \(appUpdateService.statusDescription)"
+    }
+}

@@ -293,6 +293,17 @@ struct ShortcutRegistry {
             niriBindings: []
         ),
         ShortcutDescriptor(
+            id: .checkForUpdates,
+            title: "Check for Updates",
+            detail: "Check whether a newer IDX0 version is available",
+            section: .navigation,
+            niriActionName: nil,
+            niriCompatibility: .adapted,
+            remappable: true,
+            macBindings: [],
+            niriBindings: []
+        ),
+        ShortcutDescriptor(
             id: .toggleSidebar,
             title: "Toggle Sidebar",
             detail: "Show or hide sidebar",

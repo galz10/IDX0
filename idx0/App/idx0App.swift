@@ -14,6 +14,7 @@ struct idx0App: App {
                 .environmentObject(coordinator)
                 .environmentObject(coordinator.sessionService)
                 .environmentObject(coordinator.workflowService)
+                .environmentObject(coordinator.appUpdateService)
                 .environment(\.themeColors, themeColors)
                 .frame(minWidth: 600, minHeight: 400)
                 .preferredColorScheme(themeColors.isLight ? .light : .dark)
@@ -362,6 +363,19 @@ struct idx0App: App {
                 }
             }
 
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    _ = coordinator.performCommand(.checkForUpdates)
+                }
+
+                if let actionTitle = coordinator.appUpdateService.contextualMenuActionTitle {
+                    Button(actionTitle) {
+                        coordinator.appUpdateService.performPrimaryAction()
+                    }
+                    .disabled(!coordinator.appUpdateService.canPerformPrimaryAction)
+                }
+            }
+
             CommandGroup(replacing: .appSettings) {
                 Button("Settings...") {
                     _ = coordinator.performCommand(.openSettings)
@@ -374,6 +388,7 @@ struct idx0App: App {
             SettingsView()
                 .environmentObject(coordinator.sessionService)
                 .environmentObject(coordinator.workflowService)
+                .environmentObject(coordinator.appUpdateService)
         }
     }
 

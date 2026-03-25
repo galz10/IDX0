@@ -4,6 +4,7 @@ import SwiftUI
 
 struct InlineAdvancedSettings: View {
     @ObservedObject var sessionService: SessionService
+    @EnvironmentObject private var appUpdateService: AppUpdateService
     @Environment(\.themeColors) private var tc
 
     @State private var onboardingResetPending = false
@@ -64,6 +65,54 @@ struct InlineAdvancedSettings: View {
                         .stroke(tc.surface2.opacity(0.5), lineWidth: 0.5)
                 )
                 .frame(maxWidth: 420)
+            }
+
+            SettingDivider()
+            SettingSectionHeader(title: "Updates")
+
+            SettingToggleRow(
+                label: "Auto-check for updates",
+                caption: "Check in the background after startup and every few hours.",
+                isOn: Binding(
+                    get: { sessionService.settings.autoCheckForUpdates },
+                    set: { newValue in
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            sessionService.saveSettings { settings in
+                                settings.autoCheckForUpdates = newValue
+                            }
+                            appUpdateService.refreshPolicy()
+                        }
+                    }
+                )
+            )
+
+            SettingRowView(label: "Status", caption: appUpdateService.statusDescription) {
+                HStack(spacing: 8) {
+                    if let actionTitle = appUpdateService.primaryActionTitle {
+                        Button {
+                            appUpdateService.performPrimaryAction()
+                        } label: {
+                            Text(actionTitle)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(tc.secondaryText)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(tc.surface0, in: RoundedRectangle(cornerRadius: 4))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .stroke(tc.surface2.opacity(0.5), lineWidth: 0.5)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!appUpdateService.canPerformPrimaryAction)
+                    }
+
+                    if let lastChecked = appUpdateService.state.lastCheckedAt {
+                        Text(lastChecked.formatted(date: .abbreviated, time: .shortened))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(tc.tertiaryText)
+                    }
+                }
             }
 
             SettingDivider()

@@ -262,7 +262,7 @@ struct NiriSettings: Codable, Equatable {
 }
 
 struct AppSettings: Codable, Equatable {
-    static let schemaVersion = 7
+    static let schemaVersion = 8
 
     var schemaVersion: Int
     var sidebarVisible: Bool
@@ -289,6 +289,7 @@ struct AppSettings: Codable, Equatable {
     var customKeybindings: [String: KeyChord]
     var workflowRailWidth: Double
     var terminalThemeID: String?
+    var autoCheckForUpdates: Bool
 
     init(
         schemaVersion: Int = AppSettings.schemaVersion,
@@ -315,7 +316,8 @@ struct AppSettings: Codable, Equatable {
         modKeySetting: ModKeySetting = .commandOption,
         customKeybindings: [String: KeyChord] = [:],
         workflowRailWidth: Double = 300,
-        terminalThemeID: String? = nil
+        terminalThemeID: String? = nil,
+        autoCheckForUpdates: Bool = true
     ) {
         self.schemaVersion = schemaVersion
         self.sidebarVisible = sidebarVisible
@@ -342,6 +344,7 @@ struct AppSettings: Codable, Equatable {
         self.customKeybindings = customKeybindings
         self.workflowRailWidth = workflowRailWidth
         self.terminalThemeID = terminalThemeID
+        self.autoCheckForUpdates = autoCheckForUpdates
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -371,6 +374,7 @@ struct AppSettings: Codable, Equatable {
         case customKeybindings
         case workflowRailWidth
         case terminalThemeID
+        case autoCheckForUpdates
     }
 
     init(from decoder: Decoder) throws {
@@ -407,6 +411,7 @@ struct AppSettings: Codable, Equatable {
         customKeybindings = try container.decodeIfPresent([String: KeyChord].self, forKey: .customKeybindings) ?? [:]
         workflowRailWidth = try container.decodeIfPresent(Double.self, forKey: .workflowRailWidth) ?? 300
         terminalThemeID = try container.decodeIfPresent(String.self, forKey: .terminalThemeID)
+        autoCheckForUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckForUpdates) ?? true
     }
 
     func encode(to encoder: Encoder) throws {
@@ -436,6 +441,7 @@ struct AppSettings: Codable, Equatable {
         try container.encode(customKeybindings, forKey: .customKeybindings)
         try container.encode(workflowRailWidth, forKey: .workflowRailWidth)
         try container.encodeIfPresent(terminalThemeID, forKey: .terminalThemeID)
+        try container.encode(autoCheckForUpdates, forKey: .autoCheckForUpdates)
         // Keep legacy key populated to avoid older dev builds misreading link behavior.
         try container.encode(openLinksInDefaultBrowser, forKey: .openLinksInDefaultBrowser)
     }

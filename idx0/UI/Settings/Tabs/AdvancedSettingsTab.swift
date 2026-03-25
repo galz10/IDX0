@@ -4,6 +4,7 @@ import SwiftUI
 
 struct AdvancedSettingsTab: View {
     @ObservedObject var sessionService: SessionService
+    @EnvironmentObject private var appUpdateService: AppUpdateService
 
     var body: some View {
         Form {
@@ -23,6 +24,38 @@ struct AdvancedSettingsTab: View {
                 Text("Leave empty to use the system default shell")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+            }
+
+            Section("Updates") {
+                Toggle(
+                    "Auto-check for updates",
+                    isOn: Binding(
+                        get: { sessionService.settings.autoCheckForUpdates },
+                        set: { newValue in
+                            sessionService.saveSettings { settings in
+                                settings.autoCheckForUpdates = newValue
+                            }
+                            appUpdateService.refreshPolicy()
+                        }
+                    )
+                )
+
+                Text(appUpdateService.statusDescription)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
+                if let lastChecked = appUpdateService.state.lastCheckedAt {
+                    Text("Last checked: \(lastChecked.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+
+                if let actionTitle = appUpdateService.primaryActionTitle {
+                    Button(actionTitle) {
+                        appUpdateService.performPrimaryAction()
+                    }
+                    .disabled(!appUpdateService.canPerformPrimaryAction)
+                }
             }
 
             Section("Reset") {

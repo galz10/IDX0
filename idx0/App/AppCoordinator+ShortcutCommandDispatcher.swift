@@ -97,6 +97,9 @@ extension AppCoordinator {
             showingQuickSwitch = false
             showingSettings = true
             return true
+        case .checkForUpdates:
+            appUpdateService.checkNow()
+            return true
         case .toggleSidebar:
             sessionService.saveSettings { $0.sidebarVisible.toggle() }
             return true

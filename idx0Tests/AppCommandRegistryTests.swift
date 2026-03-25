@@ -20,4 +20,12 @@ final class AppCommandRegistryTests: XCTestCase {
         XCTAssertEqual(all.count, Set(all).count)
         XCTAssertFalse(all.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
     }
+
+    func testCheckForUpdatesCommandIsPresentOnAllSurfaces() {
+        let registry = AppCommandRegistry.shared
+        XCTAssertNotNil(registry.descriptor(for: .checkForUpdates))
+        XCTAssertTrue(registry.shortcutCommandIDs.contains(.checkForUpdates))
+        XCTAssertTrue(registry.menuCommandIDs.contains(.checkForUpdates))
+        XCTAssertTrue(registry.paletteCommandIDs.contains(.checkForUpdates))
+    }
 }
