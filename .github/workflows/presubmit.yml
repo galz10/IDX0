@@ -8,16 +8,24 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   lint-docs:
     name: lint-docs
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: macos-15
+    timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
 
@@ -26,8 +34,21 @@ jobs:
           brew install swiftformat swiftlint lychee
           npm install -g markdownlint-cli
 
+      - name: Resolve Swift lint diff range
+        id: diff-range
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "range=${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${{ github.event.before }}" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            echo "range=${{ github.event.before }}...${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "range=HEAD" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run lint checks
         env:
+          PRESUBMIT_SWIFT_CHANGED_ONLY: '1'
+          PRESUBMIT_DIFF_RANGE: ${{ steps.diff-range.outputs.range }}
           PRESUBMIT_RUN_MAINTAINABILITY: '0'
         run: ./scripts/presubmit.sh lint
 
@@ -36,15 +57,18 @@ jobs:
 
   tests:
     name: tests
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: macos-15
+    timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Install test prerequisites
         run: |
           brew install zig xcodegen
-          xcodebuild -downloadComponent MetalToolchain
 
       - name: Setup GhosttyKit
         run: ./scripts/setup.sh
@@ -57,11 +81,20 @@ jobs:
 
   maintainability:
     name: maintainability
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: macos-15
-    continue-on-error: true
+    timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install maintainability prerequisites
+        run: brew install ripgrep
 
       - name: Run maintainability gate (phase 1 report-only)
-        run: ./scripts/maintainability-gate.sh
+        run: |
+          if ! ./scripts/maintainability-gate.sh; then
+            echo "::warning::Maintainability gate reported issues (phase 1 report-only)."
+          fi

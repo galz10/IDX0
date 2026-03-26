@@ -68,7 +68,7 @@ Workspace with an embedded browser tile:
 - macOS 14+
 - Xcode (project generated for Xcode 26.3)
 - `xcodegen`
-- Metal toolchain component (`xcodebuild -downloadComponent MetalToolchain`)
+- Xcode first-launch components (`xcodebuild -runFirstLaunch`)
 - `zig` (only if you need to build `GhosttyKit.xcframework` from source)
 
 ## Quick Start (Source Build)
@@ -77,7 +77,7 @@ Workspace with an embedded browser tile:
 
 ```bash
 brew install xcodegen
-xcodebuild -downloadComponent MetalToolchain
+xcodebuild -runFirstLaunch
 ```
 
 2. Set up GhosttyKit dependency:
@@ -154,7 +154,7 @@ Protocol reference:
 - Missing GhosttyKit framework:
   - Run `./scripts/setup.sh` and confirm it ends with `==> Done`.
 - Build errors for `metal`:
-  - Run `xcodebuild -downloadComponent MetalToolchain`.
+  - Run `xcodebuild -runFirstLaunch`.
 - CLI tools not appearing:
   - Confirm the binaries are on your shell `PATH`.
   - If launching from Xcode, verify scheme `PATH` environment values.

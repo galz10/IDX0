@@ -35,9 +35,67 @@ run_step() {
   "$@"
 }
 
+run_swiftlint_for_changed_files() {
+  local swift_files=("$@")
+  local i
+  local status=0
+
+  export SCRIPT_INPUT_FILE_COUNT="${#swift_files[@]}"
+  for i in "${!swift_files[@]}"; do
+    export "SCRIPT_INPUT_FILE_$i=${swift_files[$i]}"
+  done
+
+  if ! run_step "SwiftLint (changed files)" swiftlint lint --config .swiftlint.yml --use-script-input-files; then
+    status=$?
+  fi
+
+  for i in "${!swift_files[@]}"; do
+    unset "SCRIPT_INPUT_FILE_$i"
+  done
+  unset SCRIPT_INPUT_FILE_COUNT
+
+  return "$status"
+}
+
 run_swift_checks() {
   require_cmd swiftformat
   require_cmd swiftlint
+
+  if [[ "${PRESUBMIT_SWIFT_CHANGED_ONLY:-0}" == "1" ]]; then
+    require_cmd git
+
+    local diff_range="${PRESUBMIT_DIFF_RANGE:-}"
+    if [[ -z "$diff_range" ]]; then
+      if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+        diff_range="HEAD~1...HEAD"
+      else
+        diff_range="HEAD"
+      fi
+    fi
+
+    local -a swift_files=()
+    while IFS= read -r -d '' file; do
+      [[ -z "$file" ]] && continue
+      case "$file" in
+        idx0/*|idx0Tests/*|Sources/*)
+          if [[ "$file" == -* ]]; then
+            file="./$file"
+          fi
+          swift_files+=("$file")
+          ;;
+      esac
+    done < <(git diff --name-only -z --diff-filter=ACMRTUXB "$diff_range" -- '*.swift')
+
+    if [[ "${#swift_files[@]}" -eq 0 ]]; then
+      echo "==> No changed Swift files in '$diff_range'; skipping SwiftFormat/SwiftLint"
+      return
+    fi
+
+    run_step "SwiftFormat lint (changed files)" swiftformat --lint --config .swiftformat "${swift_files[@]}"
+    run_swiftlint_for_changed_files "${swift_files[@]}"
+    return
+  fi
+
   run_step "SwiftFormat lint" swiftformat --lint --config .swiftformat idx0 idx0Tests Sources
   run_step "SwiftLint" swiftlint --config .swiftlint.yml
 }
@@ -90,7 +148,7 @@ case "$COMMAND" in
     run_tests
     ;;
   fast)
-    run_swift_checks
+    PRESUBMIT_SWIFT_CHANGED_ONLY="${PRESUBMIT_SWIFT_CHANGED_ONLY:-1}" run_swift_checks
     run_markdown_lint
     ;;
   -h|--help|help)

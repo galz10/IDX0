@@ -26,8 +26,8 @@ if ! command -v zig >/dev/null 2>&1; then
 fi
 
 if ! xcrun --sdk macosx metal -v >/dev/null 2>&1; then
-  echo "Error: Metal Toolchain is missing."
-  echo "Install via: xcodebuild -downloadComponent MetalToolchain"
+  echo "Error: Metal compiler tools are unavailable in the active Xcode toolchain."
+  echo "Install required Xcode components via: xcodebuild -runFirstLaunch"
   exit 1
 fi
 

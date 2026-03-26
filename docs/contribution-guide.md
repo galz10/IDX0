@@ -16,7 +16,7 @@ Prerequisites:
 
 ```bash
 brew install zig xcodegen
-xcodebuild -downloadComponent MetalToolchain
+xcodebuild -runFirstLaunch
 ```
 
 Project bootstrap:
