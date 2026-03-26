@@ -255,16 +255,16 @@ final class WorkflowService: ObservableObject {
     sessionService.$selectedSessionID
       .sink { [weak self] sessionID in
         Task { @MainActor [weak self] in
-          guard let self else { return }
-          layoutState.focusedSessionID = sessionID
+          guard let service = self else { return }
+          service.layoutState.focusedSessionID = sessionID
           if let sessionID,
-             let saved = layoutState.lastRailSurfaceBySession[sessionID]
+             let saved = service.layoutState.lastRailSurfaceBySession[sessionID]
           {
-            selectedRailSurface = saved
+            service.selectedRailSurface = saved
           } else if sessionID != nil {
-            selectedRailSurface = .checkpoints
+            service.selectedRailSurface = .checkpoints
           }
-          persistSoon()
+          service.persistSoon()
         }
       }
       .store(in: &cancellables)
