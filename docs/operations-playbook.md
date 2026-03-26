@@ -102,6 +102,8 @@ Mitigation:
 
 ## 4. Release/Pre-Merge Checklist
 
+For the full command-by-command release flow, use [Release Runbook](release-runbook.md).
+
 - [ ] Build and test pass on target macOS dev environment.
 - [ ] Maintainability gate reviewed.
 - [ ] Coverage gate attempted (or blocked reason documented).

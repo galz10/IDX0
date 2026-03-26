@@ -214,16 +214,17 @@ DMG_STAGE_DIR="$(mktemp -d "$ROOT_DIR/.build/dmg-stage.XXXXXX")"
 DMG_MOUNT_POINT=""
 DMG_DEVICE=""
 cleanup() {
+  local mount_point="${DMG_MOUNT_POINT:-}"
   if [[ -n "${DMG_DEVICE:-}" ]]; then
     hdiutil detach "$DMG_DEVICE" >/dev/null 2>&1 || true
     DMG_DEVICE=""
-  elif [[ -n "${DMG_MOUNT_POINT:-}" ]]; then
-    hdiutil detach "$DMG_MOUNT_POINT" >/dev/null 2>&1 || true
-    DMG_MOUNT_POINT=""
+  elif [[ -n "$mount_point" ]]; then
+    hdiutil detach "$mount_point" >/dev/null 2>&1 || true
   fi
-  if [[ -n "${DMG_MOUNT_POINT:-}" ]]; then
-    rm -rf "$DMG_MOUNT_POINT"
+  if [[ -n "$mount_point" ]]; then
+    rm -rf "$mount_point"
   fi
+  DMG_MOUNT_POINT=""
   rm -rf "$DMG_STAGE_DIR"
 }
 trap cleanup EXIT

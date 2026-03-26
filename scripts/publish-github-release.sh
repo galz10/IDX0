@@ -22,7 +22,9 @@ MAKE_DRAFT=1
 PRERELEASE=0
 OPEN_WEB=0
 PUSH_TAG=1
-IDX_WEB_INDEX_PATH="/Users/gal/Documents/Github/idx-web/index.html"
+IDX_WEB_INDEX_DEFAULT_PATH="/Users/gal/Documents/Github/idx-web/index.html"
+IDX_WEB_INDEX_PATH="${IDX_WEB_INDEX_PATH:-$IDX_WEB_INDEX_DEFAULT_PATH}"
+REQUIRE_IDX_WEB_UPDATE=0
 README_PATH="$ROOT_DIR/README.md"
 
 COMMITTED_REPOS=()
@@ -48,6 +50,8 @@ Options:
   --publish                   Create release as published (not draft)
   --prerelease                Mark release as prerelease
   --no-push-tag               Do not push tag to origin
+  --idx-web-index <path>      Override idx-web download target (default: /Users/gal/Documents/Github/idx-web/index.html)
+  --require-idx-web-update    Fail if idx-web update cannot run
   --open                      Open the release page in browser after create/update
   -h, --help                  Show this help text
 
@@ -130,6 +134,14 @@ while [[ $# -gt 0 ]]; do
       PUSH_TAG=0
       shift
       ;;
+    --idx-web-index)
+      IDX_WEB_INDEX_PATH="${2:-}"
+      shift 2
+      ;;
+    --require-idx-web-update)
+      REQUIRE_IDX_WEB_UPDATE=1
+      shift
+      ;;
     --open)
       OPEN_WEB=1
       shift
@@ -173,8 +185,10 @@ require_cmd gh
 require_cmd perl
 
 release_download_url() {
-  local version="$1"
-  echo "https://github.com/galz10/IDX0/releases/download/v${version}/IDX0-${version}.dmg"
+  local repo="$1"
+  local tag="$2"
+  local dmg_name="$3"
+  echo "https://github.com/${repo}/releases/download/${tag}/${dmg_name}"
 }
 
 patch_idx_web_download_link() {
@@ -187,7 +201,7 @@ patch_idx_web_download_link() {
     exit 1
   fi
 
-  perl -0pi -e "s~https://github\\.com/galz10/IDX0/releases/download/v[^\"']+/IDX0-[^\"']*\\.dmg~${download_url}~g" "$file"
+  perl -0pi -e "s~https://github\\.com/[^/]+/[^/]+/releases/download/v[^\"']+/IDX0-[^\"']*\\.dmg~${download_url}~g" "$file"
   perl -0pi -e "s~(data-release-version=\")[^\"]*(\")~\${1}${version}\${2}~g" "$file"
 }
 
@@ -200,7 +214,7 @@ patch_readme_download_link() {
     exit 1
   fi
 
-  perl -0pi -e "s~https://github\\.com/galz10/IDX0/releases/(?:tag/v[0-9A-Za-z._-]+|download/v[0-9A-Za-z._-]+/IDX0-[0-9A-Za-z._-]+(?:-arm)?\\.dmg)~${download_url}~g" "$file"
+  perl -0pi -e "s~https://github\\.com/[^/]+/[^/]+/releases/(?:tag/v[0-9A-Za-z._-]+|download/v[0-9A-Za-z._-]+/IDX0-[0-9A-Za-z._-]+(?:-arm)?\\.dmg)~${download_url}~g" "$file"
 }
 
 hash_file() {
@@ -216,6 +230,73 @@ record_skip() {
 record_warning() {
   local message="$1"
   WARNED_REPOS+=("$message")
+}
+
+preflight_patch_target() {
+  local repo_hint="$1"
+  local target_file="$2"
+  local repo_label="$3"
+  local required="${4:-1}"
+
+  if [[ -z "$target_file" ]]; then
+    if [[ "$required" -eq 1 ]]; then
+      echo "error: $repo_label target path is empty." >&2
+      exit 1
+    fi
+    record_warning "$repo_label: target path is empty, skipped"
+    return 1
+  fi
+
+  if [[ ! -f "$target_file" ]]; then
+    if [[ "$required" -eq 1 ]]; then
+      echo "error: $repo_label target file not found: $target_file" >&2
+      exit 1
+    fi
+    record_warning "$repo_label: target file not found ($target_file), skipped"
+    return 1
+  fi
+
+  if [[ ! -d "$repo_hint" ]]; then
+    if [[ "$required" -eq 1 ]]; then
+      echo "error: repo path not found: $repo_hint" >&2
+      exit 1
+    fi
+    record_warning "$repo_label: repo path not found ($repo_hint), skipped"
+    return 1
+  fi
+
+  if ! git -C "$repo_hint" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [[ "$required" -eq 1 ]]; then
+      echo "error: not a git repo: $repo_hint" >&2
+      exit 1
+    fi
+    record_warning "$repo_label: not a git repo ($repo_hint), skipped"
+    return 1
+  fi
+
+  local repo_root
+  repo_root="$(git -C "$repo_hint" rev-parse --show-toplevel)"
+  local rel_path="${target_file#$repo_root/}"
+  if [[ "$rel_path" == "$target_file" ]]; then
+    if [[ "$required" -eq 1 ]]; then
+      echo "error: file is outside git repo ($repo_label): $target_file" >&2
+      exit 1
+    fi
+    record_warning "$repo_label: file is outside git repo ($target_file), skipped"
+    return 1
+  fi
+
+  if [[ -n "$(git -C "$repo_root" status --porcelain -- "$rel_path")" ]]; then
+    if [[ "$required" -eq 1 ]]; then
+      echo "error: pre-existing local changes detected in $repo_label ($rel_path)." >&2
+      echo "hint: commit or stash file changes before running release automation." >&2
+      exit 1
+    fi
+    record_warning "$repo_label: pre-existing local changes in $rel_path, skipped"
+    return 1
+  fi
+
+  return 0
 }
 
 auto_commit_and_push_file() {
@@ -321,6 +402,15 @@ if [[ -n "$NOTES_FILE" && ! -f "$NOTES_FILE" ]]; then
   exit 1
 fi
 
+DOWNLOAD_URL="$(release_download_url "$REPO" "$TAG" "$(basename "$DMG_PATH")")"
+
+preflight_patch_target "$ROOT_DIR" "$README_PATH" "IDX0" 1
+
+IDX_WEB_CAN_UPDATE=1
+if ! preflight_patch_target "$(dirname "$IDX_WEB_INDEX_PATH")" "$IDX_WEB_INDEX_PATH" "idx-web" "$REQUIRE_IDX_WEB_UPDATE"; then
+  IDX_WEB_CAN_UPDATE=0
+fi
+
 if [[ "$PUSH_TAG" -eq 1 ]]; then
   if ! git rev-parse "$TAG" >/dev/null 2>&1; then
     if [[ -n "$TARGET_REF" ]]; then
@@ -373,8 +463,6 @@ else
   gh release create "${CREATE_ARGS[@]}"
 fi
 
-DOWNLOAD_URL="$(release_download_url "$VERSION")"
-
 README_BEFORE_HASH="$(hash_file "$README_PATH")"
 patch_readme_download_link "$README_PATH" "$DOWNLOAD_URL"
 README_AFTER_HASH="$(hash_file "$README_PATH")"
@@ -384,16 +472,13 @@ if [[ "$README_BEFORE_HASH" != "$README_AFTER_HASH" ]]; then
 fi
 
 IDX_WEB_CHANGED=0
-if [[ -f "$IDX_WEB_INDEX_PATH" ]]; then
+if [[ "$IDX_WEB_CAN_UPDATE" -eq 1 ]]; then
   IDX_WEB_BEFORE_HASH="$(hash_file "$IDX_WEB_INDEX_PATH")"
   patch_idx_web_download_link "$IDX_WEB_INDEX_PATH" "$VERSION" "$DOWNLOAD_URL"
   IDX_WEB_AFTER_HASH="$(hash_file "$IDX_WEB_INDEX_PATH")"
   if [[ "$IDX_WEB_BEFORE_HASH" != "$IDX_WEB_AFTER_HASH" ]]; then
     IDX_WEB_CHANGED=1
   fi
-else
-  echo "error: idx-web target file not found: $IDX_WEB_INDEX_PATH" >&2
-  exit 1
 fi
 
 if [[ "$README_CHANGED" -eq 1 ]]; then
@@ -402,9 +487,9 @@ else
   record_skip "IDX0: README already points at $DOWNLOAD_URL"
 fi
 
-if [[ "$IDX_WEB_CHANGED" -eq 1 ]]; then
+if [[ "$IDX_WEB_CAN_UPDATE" -eq 1 && "$IDX_WEB_CHANGED" -eq 1 ]]; then
   auto_commit_and_push_file "$(dirname "$IDX_WEB_INDEX_PATH")" "$IDX_WEB_INDEX_PATH" "idx-web" 1 "chore(release): update download CTA for $TAG"
-else
+elif [[ "$IDX_WEB_CAN_UPDATE" -eq 1 ]]; then
   record_skip "idx-web: Download CTA already points at $DOWNLOAD_URL"
 fi
 
