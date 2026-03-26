@@ -190,8 +190,193 @@ run_link_check() {
   run_step "Lychee link check" lychee --config .lychee.toml "${md_files[@]}"
 }
 
+normalize_failed_test_name() {
+  local value="$1"
+  local trimmed inside class_part method_part class_name
+
+  trimmed="${value#"${value%%[![:space:]]*}"}"
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+  trimmed="${trimmed%\(\)}"
+  if [[ -z "$trimmed" ]]; then
+    return
+  fi
+
+  if [[ "$trimmed" == "-["*"]"* ]]; then
+    inside="${trimmed#*-[}"
+    inside="${inside%%]*}"
+    class_part="${inside%% *}"
+    method_part="${inside#* }"
+    class_name="${class_part##*.}"
+    if [[ -n "$class_name" && -n "$method_part" && "$method_part" != "$inside" ]]; then
+      echo "${class_name}.${method_part}"
+      return
+    fi
+  fi
+
+  # Convert module-qualified names (Module.Class.testName) into Class.testName.
+  if [[ "$trimmed" == *.*.* ]]; then
+    trimmed="${trimmed#*.}"
+  fi
+
+  echo "$trimmed"
+}
+
+extract_failed_tests() {
+  local log_file="$1"
+  local line in_failing_block normalized
+
+  in_failing_block=0
+  while IFS= read -r line; do
+    if [[ "$line" == "Failing tests:"* ]]; then
+      in_failing_block=1
+      continue
+    fi
+
+    if [[ "$in_failing_block" -eq 1 ]]; then
+      if [[ -z "${line//[[:space:]]/}" ]]; then
+        in_failing_block=0
+        continue
+      fi
+
+      normalized="$(normalize_failed_test_name "$line")"
+      [[ -n "$normalized" ]] && echo "$normalized"
+      continue
+    fi
+
+    if [[ "$line" == *"Test Case "*"' failed"* ]]; then
+      normalized="$(normalize_failed_test_name "$line")"
+      [[ -n "$normalized" ]] && echo "$normalized"
+    fi
+  done < "$log_file" | awk '!seen[$0]++'
+}
+
+extract_xcresult_path() {
+  local log_file="$1"
+  local line next_is_path
+
+  next_is_path=0
+  while IFS= read -r line; do
+    if [[ "$next_is_path" -eq 1 ]]; then
+      line="${line#"${line%%[![:space:]]*}"}"
+      [[ -n "$line" ]] && echo "$line"
+      return
+    fi
+
+    if [[ "$line" == "Test session results, code coverage, and logs:"* ]]; then
+      next_is_path=1
+    fi
+  done < "$log_file"
+}
+
+lookup_failure_reason_for_test() {
+  local log_file="$1"
+  local test_name="$2"
+  local class_name method_name reason_line failed_line_number start_line reason
+
+  class_name="${test_name%%.*}"
+  method_name="${test_name#*.}"
+  method_name="${method_name%\(\)}"
+
+  reason_line="$(
+    grep -F ".${class_name} ${method_name}]" "$log_file" 2>/dev/null \
+      | grep "error:" 2>/dev/null \
+      | head -n 1 \
+      || true
+  )"
+
+  if [[ -z "$reason_line" ]]; then
+    reason_line="$(
+      grep -F "${class_name}.${method_name}" "$log_file" 2>/dev/null \
+        | grep "error:" 2>/dev/null \
+        | head -n 1 \
+        || true
+    )"
+  fi
+
+  if [[ -z "$reason_line" ]]; then
+    failed_line_number="$(
+      grep -nF ".${class_name} ${method_name}]' failed" "$log_file" 2>/dev/null \
+        | head -n 1 \
+        | cut -d: -f1 \
+        || true
+    )"
+
+    if [[ -n "$failed_line_number" ]]; then
+      start_line=$((failed_line_number > 25 ? failed_line_number - 25 : 1))
+      reason_line="$(
+        sed -n "${start_line},${failed_line_number}p" "$log_file" \
+          | grep -E "error:|Assertion failed:|fatal error:|XCTAssert" 2>/dev/null \
+          | tail -n 1 \
+          || true
+      )"
+    fi
+  fi
+
+  if [[ -z "$reason_line" ]]; then
+    echo "No explicit assertion/error line found in xcodebuild output."
+    return
+  fi
+
+  reason="$(printf '%s' "$reason_line" | sed -E 's/^[[:space:]]+//')"
+  reason="$(printf '%s' "$reason" | sed -E 's#^.*error:[[:space:]]*-\[[^]]+\][[:space:]]*:[[:space:]]*##')"
+  if [[ -z "$reason" ]]; then
+    reason="$(printf '%s' "$reason_line" | sed -E 's/^[[:space:]]+//')"
+  fi
+
+  echo "$reason"
+}
+
+summarize_xcode_test_failures() {
+  local log_file="$1"
+  local -a failed_tests=()
+  local test_name reason index xcresult_path
+
+  while IFS= read -r test_name; do
+    [[ -z "$test_name" ]] && continue
+    failed_tests+=("$test_name")
+  done < <(extract_failed_tests "$log_file")
+
+  xcresult_path="$(extract_xcresult_path "$log_file")"
+
+  echo
+  echo "==> Test failure summary"
+
+  if [[ "${#failed_tests[@]}" -eq 0 ]]; then
+    echo "No individual failing XCTest cases were parsed."
+    echo "Top error lines:"
+    grep -E "error:|\\*\\* TEST FAILED \\*\\*|BUILD FAILED" "$log_file" 2>/dev/null \
+      | head -n 12 \
+      | sed 's/^/  - /' \
+      || true
+  else
+    index=1
+    for test_name in "${failed_tests[@]}"; do
+      reason="$(lookup_failure_reason_for_test "$log_file" "$test_name")"
+      echo "  $index. $test_name"
+      echo "     reason: $reason"
+      index=$((index + 1))
+    done
+  fi
+
+  if [[ -n "$xcresult_path" ]]; then
+    echo "xcresult: $xcresult_path"
+  fi
+}
+
 run_tests() {
-  run_step "xcodebuild tests" xcodebuild -project idx0.xcodeproj -scheme idx0 -destination 'platform=macOS' test
+  local log_file
+
+  log_file="$(mktemp -t idx0-presubmit-tests)"
+  echo "==> xcodebuild tests"
+
+  if xcodebuild -project idx0.xcodeproj -scheme idx0 -destination 'platform=macOS' test 2>&1 | tee "$log_file"; then
+    rm -f "$log_file"
+    return
+  fi
+
+  summarize_xcode_test_failures "$log_file"
+  echo "==> Full xcodebuild log: $log_file"
+  return 1
 }
 
 run_maintainability() {
