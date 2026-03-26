@@ -155,7 +155,6 @@ final class WorkflowService: ObservableObject {
         }
     }
     let persistenceDebouncer = Debouncer(delay: 0.2)
-    let notificationCenter = UNUserNotificationCenter.current()
     var cancellables: Set<AnyCancellable> = []
 
     var handledEventIDs: Set<UUID> = []
@@ -598,6 +597,7 @@ final class WorkflowService: ObservableObject {
     func postApprovalNotificationIfNeeded(sessionID: UUID, title: String, summary: String) {
         guard !NSApp.isActive else { return }
         Task { @MainActor [sessionID, title, summary] in
+            let notificationCenter = UNUserNotificationCenter.current()
             let granted = (try? await notificationCenter.requestAuthorization(options: [.alert, .sound])) ?? false
             guard granted else { return }
 
@@ -617,6 +617,7 @@ final class WorkflowService: ObservableObject {
     }
 
     func addNotificationRequest(_ request: UNNotificationRequest) async throws {
+        let notificationCenter = UNUserNotificationCenter.current()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             notificationCenter.add(request) { error in
                 if let error {
