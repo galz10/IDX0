@@ -80,19 +80,19 @@ brew install xcodegen
 xcodebuild -runFirstLaunch
 ```
 
-2. Set up GhosttyKit dependency:
+1. Set up GhosttyKit dependency:
 
 ```bash
 ./scripts/setup.sh
 ```
 
-3. Generate the project:
+1. Generate the project:
 
 ```bash
 xcodegen generate
 ```
 
-4. Open and run:
+1. Open and run:
 
 ```bash
 open idx0.xcodeproj

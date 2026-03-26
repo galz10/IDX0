@@ -45,21 +45,23 @@ Suggested branch naming:
    - Architecture: `docs/architecture/*`
    - Style: `docs/style-guide.md`
    - Testing: `docs/testing-guide.md`
-2. Confirm ownership boundary:
+1. Confirm ownership boundary:
    - UI only: `idx0/UI/**`
    - Session/platform logic: `idx0/Services/Session/**`
    - Workflow/inbox/review logic: `idx0/Services/Workflow/**`
    - IPC/CLI contract: `idx0/App/IPCCommandRouter.swift`, `Sources/IPCShared/IPCContract.swift`, `Sources/idx0/idx0.swift`
-3. Implement in smallest viable slice.
-4. Add/update tests in `idx0Tests/**`.
-5. Run local gates:
-  - `./scripts/install-hooks.sh` (one-time per clone)
-  - `./scripts/presubmit.sh fast` for quick local iteration
-  - `./scripts/presubmit.sh lint`
-  - `./scripts/presubmit.sh docs`
-  - `./scripts/presubmit.sh test` (or targeted suites during iteration)
-6. Update docs for behavioral, architectural, or protocol changes.
-7. Submit PR with risk notes and verification commands.
+1. Implement in smallest viable slice.
+1. Add/update tests in `idx0Tests/**`.
+1. Run local gates:
+
+   - `./scripts/install-hooks.sh` (one-time per clone)
+   - `./scripts/presubmit.sh fast` for quick local iteration
+   - `./scripts/presubmit.sh lint`
+   - `./scripts/presubmit.sh docs`
+   - `./scripts/presubmit.sh test` (or targeted suites during iteration)
+
+1. Update docs for behavioral, architectural, or protocol changes.
+1. Submit PR with risk notes and verification commands.
 
 ## 5. Change Playbooks
 

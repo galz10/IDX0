@@ -53,6 +53,9 @@ jobs:
         run: ./scripts/presubmit.sh lint
 
       - name: Run docs checks
+        env:
+          PRESUBMIT_MD_CHANGED_ONLY: '1'
+          PRESUBMIT_DIFF_RANGE: ${{ steps.diff-range.outputs.range }}
         run: ./scripts/presubmit.sh docs
 
   tests:

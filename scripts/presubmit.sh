@@ -100,13 +100,82 @@ run_swift_checks() {
   run_step "SwiftLint" swiftlint --config .swiftlint.yml
 }
 
+resolve_diff_range() {
+  local diff_range="${PRESUBMIT_DIFF_RANGE:-}"
+  if [[ -z "$diff_range" ]]; then
+    if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+      diff_range="HEAD~1...HEAD"
+    else
+      diff_range="HEAD"
+    fi
+  fi
+
+  printf '%s\n' "$diff_range"
+}
+
+collect_changed_markdown_files() {
+  require_cmd git
+
+  local diff_range
+  diff_range="$(resolve_diff_range)"
+
+  local -a md_files=()
+  while IFS= read -r -d '' file; do
+    [[ -z "$file" ]] && continue
+    case "$file" in
+      README.md|docs/*|.github/*)
+        if [[ "$file" == -* ]]; then
+          file="./$file"
+        fi
+        md_files+=("$file")
+        ;;
+    esac
+  done < <(git diff --name-only -z --diff-filter=ACMRTUXB "$diff_range" -- '*.md')
+
+  if [[ "${#md_files[@]}" -eq 0 ]]; then
+    echo "==> No changed markdown files in '$diff_range'"
+    return
+  fi
+
+  printf '%s\0' "${md_files[@]}"
+}
+
 run_markdown_lint() {
   require_cmd markdownlint
+
+  if [[ "${PRESUBMIT_MD_CHANGED_ONLY:-0}" == "1" ]]; then
+    local -a md_files=()
+    while IFS= read -r -d '' file; do
+      md_files+=("$file")
+    done < <(collect_changed_markdown_files)
+
+    if [[ "${#md_files[@]}" -eq 0 ]]; then
+      return
+    fi
+
+    run_step "Markdown lint (changed files)" markdownlint --config .markdownlint.json "${md_files[@]}"
+    return
+  fi
+
   run_step "Markdown lint" markdownlint --config .markdownlint.json README.md docs .github
 }
 
 run_link_check() {
   require_cmd lychee
+
+  if [[ "${PRESUBMIT_MD_CHANGED_ONLY:-0}" == "1" ]]; then
+    local -a md_files=()
+    while IFS= read -r -d '' file; do
+      md_files+=("$file")
+    done < <(collect_changed_markdown_files)
+
+    if [[ "${#md_files[@]}" -eq 0 ]]; then
+      return
+    fi
+
+    run_step "Lychee link check (changed files)" lychee --config .lychee.toml "${md_files[@]}"
+    return
+  fi
 
   local md_files=()
   while IFS= read -r -d '' file; do
@@ -149,7 +218,7 @@ case "$COMMAND" in
     ;;
   fast)
     PRESUBMIT_SWIFT_CHANGED_ONLY="${PRESUBMIT_SWIFT_CHANGED_ONLY:-1}" run_swift_checks
-    run_markdown_lint
+    PRESUBMIT_MD_CHANGED_ONLY="${PRESUBMIT_MD_CHANGED_ONLY:-1}" run_markdown_lint
     ;;
   -h|--help|help)
     usage
