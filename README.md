@@ -131,6 +131,7 @@ Protocol reference:
 - [docs/contribution-guide.md](docs/contribution-guide.md)
 - [docs/style-guide.md](docs/style-guide.md)
 - [docs/testing-guide.md](docs/testing-guide.md)
+- [docs/release-runbook.md](docs/release-runbook.md)
 - [docs/architecture/deep-dive.md](docs/architecture/deep-dive.md)
 
 ## Quality Gates
