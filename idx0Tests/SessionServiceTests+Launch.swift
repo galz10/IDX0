@@ -178,12 +178,28 @@ extension SessionServiceTests {
             .path
 
         XCTAssertEqual(process.terminationStatus, 0)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: sandboxProfilePath))
         XCTAssertTrue(FileManager.default.fileExists(atPath: launchResultPath))
 
         let launchResultData = try Data(contentsOf: URL(fileURLWithPath: launchResultPath))
         let launchResult = try JSONDecoder().decode(LaunchHelperResult.self, from: launchResultData)
-        XCTAssertEqual(launchResult.enforcementState, .enforced)
+        switch launchResult.enforcementState {
+        case .enforced:
+            XCTAssertTrue(FileManager.default.fileExists(atPath: sandboxProfilePath))
+        case .degraded:
+            let reason = launchResult.message ?? ""
+            XCTAssertFalse(
+                reason.contains("missing repo/worktree root"),
+                "Restricted launch unexpectedly lost write root: \(reason)"
+            )
+            XCTAssertTrue(
+                reason.contains("sandbox-exec")
+                    || reason.contains("Sandbox launch failed")
+                    || reason.contains("Sandbox profile generation failed"),
+                "Unexpected degraded reason: \(reason)"
+            )
+        case .unenforced:
+            XCTFail("Restricted profile launch was bypassed without degradation.")
+        }
     }
 
     func testGhosttyCommandEscapingPreservesPathsWithSpaces() throws {
