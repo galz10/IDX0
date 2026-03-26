@@ -14,11 +14,13 @@ final class SessionService: ObservableObject {
     @Published var pendingWorktreeCleanupNotice: WorktreeCleanupNotice?
     @Published var pendingWorktreeDeletePrompt: WorktreeDeletePrompt?
     @Published var pendingWorktreeInspector: WorktreeInspectorRequest?
+    @Published var pendingBrowserControlConsentPrompt: BrowserControlConsentPrompt?
 
     let sessionStore: SessionStore
     let projectStore: ProjectStore
     let inboxStore: InboxStore
     let settingsStore: SettingsStore
+    let browserControlSetupService: any BrowserControlSetupServicing
     nonisolated(unsafe) let worktreeService: WorktreeServiceProtocol
     let shellHealthService = ShellIntegrationHealthService()
     let host: GhosttyAppHost
@@ -63,6 +65,7 @@ final class SessionService: ObservableObject {
     var attentionCenter = AttentionCenter()
     var notificationAuthorizationRequested = false
     var lastNotificationSentAt: [String: Date] = [:]
+    var queuedBrowserOpenIntents: [BrowserOpenIntent] = []
     let persistenceDebouncer = Debouncer(delay: 0.2)
     let persistenceQueue = DispatchQueue(label: "idx0.persistence.serial", qos: .utility)
     let restoreCoordinator = SessionRestoreCoordinator()
@@ -91,6 +94,7 @@ final class SessionService: ObservableObject {
         projectStore: ProjectStore,
         inboxStore: InboxStore,
         settingsStore: SettingsStore,
+        browserControlSetupService: (any BrowserControlSetupServicing)? = nil,
         worktreeService: WorktreeServiceProtocol,
         launcherDirectory: URL? = nil,
         ipcSocketPath: String? = nil,
@@ -102,6 +106,10 @@ final class SessionService: ObservableObject {
         self.projectStore = projectStore
         self.inboxStore = inboxStore
         self.settingsStore = settingsStore
+        self.browserControlSetupService = browserControlSetupService
+            ?? BrowserControlSetupService(
+                appSupportDirectory: settingsStore.storageURL.deletingLastPathComponent()
+            )
         self.worktreeService = worktreeService
         self.host = host
         self.launcherDirectory = launcherDirectory ?? FileManager.default.temporaryDirectory.appendingPathComponent("idx0-launchers", isDirectory: true)

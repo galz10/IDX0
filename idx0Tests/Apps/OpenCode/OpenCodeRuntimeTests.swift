@@ -48,6 +48,79 @@ final class OpenCodeRuntimeTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: paths.sessionDirectory.path))
     }
 
+    func testPrepareSessionStateMergesBrowserControlMCPConfigWithoutClobberingExistingConfig() throws {
+        let root = temporaryOpenCodeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let idx0Root = root.appendingPathComponent("idx0", isDirectory: true)
+        let openCodeRoot = idx0Root.appendingPathComponent("opencode", isDirectory: true)
+        try FileManager.default.createDirectory(at: openCodeRoot, withIntermediateDirectories: true)
+
+        let wrapperScriptURL = BrowserControlSetupService.wrapperScriptURL(appSupportDirectory: idx0Root)
+        try FileManager.default.createDirectory(at: wrapperScriptURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "#!/bin/sh\nexit 0\n".write(to: wrapperScriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapperScriptURL.path)
+
+        let sessionID = UUID()
+        let paths = OpenCodeRuntimePaths(sessionID: sessionID, rootDirectoryOverride: openCodeRoot)
+        let manager = OpenCodeStateSnapshotManager()
+
+        let configDirectoryURL = paths.xdgConfigHomeDirectory.appendingPathComponent("opencode", isDirectory: true)
+        try FileManager.default.createDirectory(at: configDirectoryURL, withIntermediateDirectories: true)
+        let configURL = configDirectoryURL.appendingPathComponent("opencode.json", isDirectory: false)
+        let existingConfig = """
+        {
+          "$schema": "https://opencode.ai/config.json",
+          "mcp": {
+            "existing-server": {
+              "type": "remote",
+              "url": "https://example.com/mcp"
+            }
+          },
+          "tools": {
+            "existing-server_*": false
+          }
+        }
+        """
+        try existingConfig.write(to: configURL, atomically: true, encoding: .utf8)
+
+        _ = try manager.prepareSessionState(paths: paths)
+
+        let updatedData = try Data(contentsOf: configURL)
+        let json = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: updatedData) as? [String: Any]
+        )
+        let mcp = try XCTUnwrap(json["mcp"] as? [String: Any])
+        XCTAssertNotNil(mcp["existing-server"])
+        let idx0Browser = try XCTUnwrap(mcp[BrowserControlSetupService.mcpServerName] as? [String: Any])
+        XCTAssertEqual(idx0Browser["type"] as? String, "local")
+        XCTAssertEqual(idx0Browser["enabled"] as? Bool, true)
+        XCTAssertEqual(idx0Browser["command"] as? [String], [wrapperScriptURL.path])
+
+        let tools = try XCTUnwrap(json["tools"] as? [String: Any])
+        XCTAssertEqual(tools["existing-server_*"] as? Bool, false)
+    }
+
+    func testPrepareSessionStateSkipsBrowserControlConfigWhenWrapperIsUnavailable() throws {
+        let root = temporaryOpenCodeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let idx0Root = root.appendingPathComponent("idx0", isDirectory: true)
+        let openCodeRoot = idx0Root.appendingPathComponent("opencode", isDirectory: true)
+        try FileManager.default.createDirectory(at: openCodeRoot, withIntermediateDirectories: true)
+
+        let sessionID = UUID()
+        let paths = OpenCodeRuntimePaths(sessionID: sessionID, rootDirectoryOverride: openCodeRoot)
+        let manager = OpenCodeStateSnapshotManager()
+
+        _ = try manager.prepareSessionState(paths: paths)
+
+        let configURL = paths.xdgConfigHomeDirectory
+            .appendingPathComponent("opencode", isDirectory: true)
+            .appendingPathComponent("opencode.json", isDirectory: false)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: configURL.path))
+    }
+
     func testOpenCodeRuntimeStateDisplayMessagesAreStable() {
         XCTAssertEqual(OpenCodeTileRuntimeState.idle.displayMessage, "Ready")
         XCTAssertEqual(OpenCodeTileRuntimeState.starting.displayMessage, "Starting OpenCode...")

@@ -555,6 +555,7 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
     private let snapshotManager: T3StateSnapshotManager
     private let manifestProvider: () -> T3BuildManifest
     private let paths: T3RuntimePaths
+    private let browserControlEnabled: Bool
 
     private let readinessIntervalNanoseconds: UInt64 = 250_000_000
     private let readinessTimeoutSeconds: TimeInterval = 20
@@ -579,7 +580,8 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         launchDirectoryProvider: @escaping () -> String?,
         buildCoordinator: T3BuildCoordinator,
         snapshotManager: T3StateSnapshotManager,
-        manifestProvider: @escaping () -> T3BuildManifest = { T3BuildManifest.loadFromBundle() }
+        manifestProvider: @escaping () -> T3BuildManifest = { T3BuildManifest.loadFromBundle() },
+        browserControlEnabled: Bool = false
     ) {
         self.sessionID = sessionID
         self.itemID = itemID
@@ -588,6 +590,7 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
         self.snapshotManager = snapshotManager
         self.manifestProvider = manifestProvider
         self.paths = T3RuntimePaths(sessionID: sessionID)
+        self.browserControlEnabled = browserControlEnabled
 
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -708,6 +711,11 @@ final class T3TileController: ObservableObject, NiriAppTileRuntimeControlling {
             stateDirectory: stateDirectory,
             workingDirectory: launchDirectoryProvider() ?? FileManager.default.homeDirectoryForCurrentUser.path
         )
+        if browserControlEnabled {
+            appendRuntimeLog(
+                "browser control enabled via MCP server '\(BrowserControlSetupService.mcpServerName)' for globally configured CLIs"
+            )
+        }
 
         let ready = await waitForServerReady(port: port)
         guard ready else {

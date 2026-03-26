@@ -658,7 +658,8 @@ final class SessionServiceTests: XCTestCase {
 
     static func makeService(
         root: URL,
-        niriAppRegistry: NiriAppRegistry = NiriAppRegistry()
+        niriAppRegistry: NiriAppRegistry = NiriAppRegistry(),
+        browserControlSetupService: (any BrowserControlSetupServicing)? = nil
     ) throws -> SessionService {
         let paths = FileSystemPaths(
             appSupportDirectory: root,
@@ -679,6 +680,7 @@ final class SessionServiceTests: XCTestCase {
             projectStore: ProjectStore(url: paths.projectsFile),
             inboxStore: InboxStore(url: paths.inboxFile),
             settingsStore: SettingsStore(url: paths.settingsFile),
+            browserControlSetupService: browserControlSetupService,
             worktreeService: worktree,
             launcherDirectory: root.appendingPathComponent("launchers", isDirectory: true),
             niriAppRegistry: niriAppRegistry,
@@ -690,12 +692,19 @@ final class SessionServiceTests: XCTestCase {
     struct Fixture {
         let service: SessionService
 
-        init(niriAppRegistry: NiriAppRegistry = NiriAppRegistry()) throws {
+        init(
+            niriAppRegistry: NiriAppRegistry = NiriAppRegistry(),
+            browserControlSetupService: (any BrowserControlSetupServicing)? = nil
+        ) throws {
             let root = FileManager.default.temporaryDirectory
                 .appendingPathComponent("idx0-service-tests-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 
-            service = try SessionServiceTests.makeService(root: root, niriAppRegistry: niriAppRegistry)
+            service = try SessionServiceTests.makeService(
+                root: root,
+                niriAppRegistry: niriAppRegistry,
+                browserControlSetupService: browserControlSetupService
+            )
         }
     }
 

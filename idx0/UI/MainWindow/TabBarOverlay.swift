@@ -88,7 +88,7 @@ struct TabBarOverlay: View {
             if !sessionService.settings.niriCanvasEnabled {
                 Button {
                     if let selected = sessionService.selectedSessionID {
-                        sessionService.toggleBrowserSplit(for: selected)
+                        sessionService.requestToggleBrowserSplit(for: selected)
                     }
                 } label: {
                     Image(systemName: "rectangle.split.2x1")
@@ -144,4 +144,3 @@ struct TabBarOverlay: View {
         }
     }
 }
-

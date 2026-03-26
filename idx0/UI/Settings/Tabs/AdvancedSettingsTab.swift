@@ -25,6 +25,26 @@ struct AdvancedSettingsTab: View {
                     .foregroundStyle(.tertiary)
             }
 
+            Section("Browser Control") {
+                if sessionService.settings.browserControlConsent == .enabled {
+                    Button("Re-run Browser Control Setup") {
+                        sessionService.presentBrowserControlConsentPromptFromSettings()
+                    }
+                } else {
+                    Button("Enable Browser Control") {
+                        sessionService.presentBrowserControlConsentPromptFromSettings()
+                    }
+                }
+
+                Button("Reset Browser Control Consent (for testing)") {
+                    sessionService.resetBrowserControlConsentForTesting()
+                }
+
+                Text(browserControlStatusText)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
             Section("Reset") {
                 Button("Reset Niri Walkthrough (requires restart)") {
                     sessionService.saveSettings { settings in
@@ -53,5 +73,16 @@ struct AdvancedSettingsTab: View {
         }
         .formStyle(.grouped)
         .padding(10)
+    }
+
+    private var browserControlStatusText: String {
+        switch sessionService.settings.browserControlConsent {
+        case .undecided:
+            return "Browser control has not been configured yet."
+        case .enabled:
+            return "Browser control is enabled."
+        case .declined:
+            return "Browser control prompt was declined. You can enable it any time."
+        }
     }
 }
