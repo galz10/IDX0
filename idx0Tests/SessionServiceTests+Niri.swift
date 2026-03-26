@@ -527,15 +527,17 @@ extension SessionServiceTests {
             sessionID: session.id,
             workspaceID: workspace.id,
             leftColumnID: left.id,
-            leftWidth: 640,
+            leftWidth: 1.6,
             rightColumnID: right.id,
-            rightWidth: 420
+            rightWidth: 0.9
         )
 
         layout = service.niriLayout(for: session.id)
         let resizedWorkspace = layout.workspaces[workspaceIndex]
-        XCTAssertEqual(resizedWorkspace.columns[0].preferredWidth, 640)
-        XCTAssertEqual(resizedWorkspace.columns[1].preferredWidth, 420)
+        let leftWidth = try XCTUnwrap(resizedWorkspace.columns[0].preferredWidth)
+        let rightWidth = try XCTUnwrap(resizedWorkspace.columns[1].preferredWidth)
+        XCTAssertEqual(leftWidth, 1.6, accuracy: 0.001)
+        XCTAssertEqual(rightWidth, 0.9, accuracy: 0.001)
     }
 
     func testNiriItemResizePersistsPreferredHeights() async throws {
@@ -568,15 +570,17 @@ extension SessionServiceTests {
             workspaceID: workspace.id,
             columnID: column.id,
             upperItemID: upper.id,
-            upperHeight: 300,
+            upperHeight: 1.2,
             lowerItemID: lower.id,
-            lowerHeight: 220
+            lowerHeight: 0.7
         )
 
         layout = service.niriLayout(for: session.id)
         let resizedColumn = layout.workspaces[workspaceIndex].columns[columnIndex]
-        XCTAssertEqual(resizedColumn.items[0].preferredHeight, 300)
-        XCTAssertEqual(resizedColumn.items[1].preferredHeight, 220)
+        let upperHeight = try XCTUnwrap(resizedColumn.items[0].preferredHeight)
+        let lowerHeight = try XCTUnwrap(resizedColumn.items[1].preferredHeight)
+        XCTAssertEqual(upperHeight, 1.2, accuracy: 0.001)
+        XCTAssertEqual(lowerHeight, 0.7, accuracy: 0.001)
     }
 
     func testNiriMoveItemAcrossWorkspacesUpdatesCameraAndFocus() async throws {
@@ -915,8 +919,8 @@ extension SessionServiceTests {
         service.ensureNiriLayoutState(for: session.id)
 
         service.saveSettings { settings in
-            settings.niri.defaultNewColumnWidth = 900
-            settings.niri.defaultNewTileHeight = 520
+            settings.niri.defaultNewColumnWidth = 0.9
+            settings.niri.defaultNewTileHeight = 0.52
         }
 
         guard let firstItemID = service.niriAddTerminalRight(in: session.id) else {
@@ -931,12 +935,12 @@ extension SessionServiceTests {
         }
         let firstWidth = try XCTUnwrap(layout.workspaces[firstPath.workspaceIndex].columns[firstPath.columnIndex].preferredWidth)
         let firstHeight = try XCTUnwrap(layout.workspaces[firstPath.workspaceIndex].columns[firstPath.columnIndex].items[firstPath.itemIndex].preferredHeight)
-        XCTAssertEqual(firstWidth, 900, accuracy: 0.001)
-        XCTAssertEqual(firstHeight, 520, accuracy: 0.001)
+        XCTAssertEqual(firstWidth, 0.9, accuracy: 0.001)
+        XCTAssertEqual(firstHeight, 0.52, accuracy: 0.001)
 
         service.saveSettings { settings in
-            settings.niri.defaultNewColumnWidth = 1100
-            settings.niri.defaultNewTileHeight = 640
+            settings.niri.defaultNewColumnWidth = 1.1
+            settings.niri.defaultNewTileHeight = 0.64
         }
 
         guard let secondItemID = service.niriAddTaskBelow(in: session.id),
@@ -959,11 +963,11 @@ extension SessionServiceTests {
         let thirdWidth = try XCTUnwrap(layout.workspaces[thirdPath.workspaceIndex].columns[thirdPath.columnIndex].preferredWidth)
         let thirdHeight = try XCTUnwrap(layout.workspaces[thirdPath.workspaceIndex].columns[thirdPath.columnIndex].items[thirdPath.itemIndex].preferredHeight)
 
-        XCTAssertEqual(unchangedFirstWidth, 900, accuracy: 0.001)
-        XCTAssertEqual(unchangedFirstHeight, 520, accuracy: 0.001)
-        XCTAssertEqual(secondHeight, 640, accuracy: 0.001)
-        XCTAssertEqual(thirdWidth, 1100, accuracy: 0.001)
-        XCTAssertEqual(thirdHeight, 640, accuracy: 0.001)
+        XCTAssertEqual(unchangedFirstWidth, 0.9, accuracy: 0.001)
+        XCTAssertEqual(unchangedFirstHeight, 0.52, accuracy: 0.001)
+        XCTAssertEqual(secondHeight, 0.64, accuracy: 0.001)
+        XCTAssertEqual(thirdWidth, 1.1, accuracy: 0.001)
+        XCTAssertEqual(thirdHeight, 0.64, accuracy: 0.001)
     }
 
     func testNiriGenericAppSelectionEnsuresControllerViaDescriptorFactory() async throws {
