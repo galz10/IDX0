@@ -370,11 +370,6 @@ struct idx0App: App {
             }
         }
 
-        Settings {
-            SettingsView()
-                .environmentObject(coordinator.sessionService)
-                .environmentObject(coordinator.workflowService)
-        }
     }
 
     private var themeColors: AppThemeColors {
