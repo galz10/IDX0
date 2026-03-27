@@ -22,7 +22,9 @@ expected results, and edge cases. -->
 
 <!-- Check all that apply before requesting review or merging. -->
 
-- [ ] Builds successfully (`xcodebuild` / Xcode)
+- [ ] `lint-docs` check is green
+- [ ] `tests` check is green
+- [ ] `maintainability` result reviewed (phase 1 report-only)
 - [ ] Added/updated tests (if needed)
 - [ ] Updated relevant documentation and README (if needed)
 - [ ] Noted breaking changes (if any)

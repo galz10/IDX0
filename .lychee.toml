@@ -1,0 +1,13 @@
+accept = [200, 201, 202, 203, 204, 206, 301, 302, 303, 307, 308, 403, 429]
+exclude_all_private = true
+include_mail = false
+max_retries = 2
+retry_wait_time = 2
+timeout = 20
+user_agent = "idx0-presubmit-link-checker"
+exclude = [
+  "^http://localhost",
+  "^https://localhost",
+  "^http://127\\.0\\.0\\.1",
+  "^https://127\\.0\\.0\\.1"
+]
