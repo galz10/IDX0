@@ -1,0 +1,14 @@
+included:
+  - idx0
+  - idx0Tests
+  - Sources
+
+excluded:
+  - .build
+  - .swiftpm
+  - ghostty
+  - GhosttyKit.xcframework
+  - idx0.xcodeproj
+
+disabled_rules:
+  - todo

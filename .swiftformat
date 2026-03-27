@@ -1,0 +1,6 @@
+--swiftversion 6.0
+--indent 2
+--linebreaks lf
+--trimwhitespace always
+--stripunusedargs closure-only
+--exclude .build,.swiftpm,ghostty,GhosttyKit.xcframework,idx0.xcodeproj

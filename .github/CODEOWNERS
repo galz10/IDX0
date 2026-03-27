@@ -1,1 +1,11 @@
+# Default owner for all repository files.
 * @galz10
+
+# Security-sensitive quality gate surfaces.
+/.github/CODEOWNERS @galz10
+/.github/workflows/* @galz10
+/.githooks/* @galz10
+/scripts/install-hooks.sh @galz10
+/scripts/maintainability-gate.sh @galz10
+/scripts/presubmit.sh @galz10
+/scripts/setup.sh @galz10
