@@ -1,6 +1,6 @@
 {
   "repositoryURL": "https://github.com/pingdotgg/t3code.git",
-  "pinnedCommit": "2a237c20019a",
+  "pinnedCommit": "HEAD",
   "installCommand": "bun install --frozen-lockfile",
   "buildCommand": "bun run --cwd apps/web build && bun run --cwd apps/server build",
   "entrypoint": "apps/server/dist/index.mjs",
