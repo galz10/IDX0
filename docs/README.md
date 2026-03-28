@@ -1,6 +1,6 @@
 # idx0 Documentation Hub
 
-Last updated: 2026-03-22
+Last updated: 2026-03-25
 
 This folder is the contributor handbook for `idx0`, a native macOS session-first terminal app built with SwiftUI + AppKit + libghostty.
 
@@ -10,6 +10,7 @@ This folder is the contributor handbook for `idx0`, a native macOS session-first
 - Feature or refactor work: read [Architecture Deep Dive](architecture/deep-dive.md) and [Runtime Integrations](architecture/runtime-integrations.md).
 - Data/model changes: read [Persistence and State](architecture/persistence-and-state.md).
 - Release hardening and incidents: use [Operations Playbook](operations-playbook.md).
+- Publishing a version: follow [Release Runbook](release-runbook.md).
 
 ## Repository Snapshot (2026-03-22)
 
@@ -27,6 +28,7 @@ This folder is the contributor handbook for `idx0`, a native macOS session-first
 - [Style Guide](style-guide.md)
 - [Testing Guide](testing-guide.md)
 - [Operations Playbook](operations-playbook.md)
+- [Release Runbook](release-runbook.md)
 
 ### Architecture Guides
 

@@ -1,0 +1,137 @@
+name: Presubmit
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  lint-docs:
+    name: lint-docs
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+
+      - name: Install lint + docs tools
+        run: |
+          brew install swiftformat swiftlint lychee
+          npm install -g markdownlint-cli
+
+      - name: Resolve Swift lint diff range
+        id: diff-range
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "range=${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${{ github.event.before }}" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            echo "range=${{ github.event.before }}...${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "range=HEAD" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run lint checks
+        env:
+          PRESUBMIT_SWIFT_CHANGED_ONLY: '1'
+          PRESUBMIT_DIFF_RANGE: ${{ steps.diff-range.outputs.range }}
+          PRESUBMIT_RUN_MAINTAINABILITY: '0'
+        run: ./scripts/presubmit.sh lint
+
+      - name: Run docs checks
+        env:
+          PRESUBMIT_MD_CHANGED_ONLY: '1'
+          PRESUBMIT_DIFF_RANGE: ${{ steps.diff-range.outputs.range }}
+        run: ./scripts/presubmit.sh docs
+
+  tests:
+    name: tests
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install test prerequisites
+        run: |
+          brew install zig xcodegen
+
+      - name: Resolve Ghostty cache key
+        id: ghostty-cache
+        run: |
+          submodule_sha="$(git ls-tree HEAD ghostty | awk '{print $3}')"
+          if [[ "$submodule_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            ghostty_sha="$submodule_sha"
+          else
+            ghostty_sha="$(git ls-remote https://github.com/manaflow-ai/ghostty.git refs/heads/main | awk '{print $1}')"
+          fi
+
+          if [[ ! "$ghostty_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "error: failed to resolve Ghostty SHA for cache key" >&2
+            exit 1
+          fi
+
+          echo "sha=$ghostty_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Restore GhosttyKit cache
+        id: ghosttykit-cache-restore
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/idx0/ghosttykit
+          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-${{ steps.ghostty-cache.outputs.sha }}
+          restore-keys: |
+            ghosttykit-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Setup GhosttyKit
+        id: setup-ghosttykit
+        run: ./scripts/setup.sh
+
+      - name: Save GhosttyKit cache
+        if: steps.setup-ghosttykit.conclusion == 'success'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/idx0/ghosttykit
+          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-${{ steps.ghostty-cache.outputs.sha }}
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Run test suite
+        run: ./scripts/presubmit.sh test
+
+  maintainability:
+    name: maintainability
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install maintainability prerequisites
+        run: brew install ripgrep
+
+      - name: Run maintainability gate (phase 1 report-only)
+        run: |
+          if ! ./scripts/maintainability-gate.sh; then
+            echo "::warning::Maintainability gate reported issues (phase 1 report-only)."
+          fi

@@ -68,7 +68,7 @@ Workspace with an embedded browser tile:
 - macOS 14+
 - Xcode (project generated for Xcode 26.3)
 - `xcodegen`
-- Metal toolchain component (`xcodebuild -downloadComponent MetalToolchain`)
+- Xcode first-launch components (`xcodebuild -runFirstLaunch`)
 - `zig` (only if you need to build `GhosttyKit.xcframework` from source)
 
 ## Quick Start (Source Build)
@@ -77,22 +77,22 @@ Workspace with an embedded browser tile:
 
 ```bash
 brew install xcodegen
-xcodebuild -downloadComponent MetalToolchain
+xcodebuild -runFirstLaunch
 ```
 
-2. Set up GhosttyKit dependency:
+1. Set up GhosttyKit dependency:
 
 ```bash
 ./scripts/setup.sh
 ```
 
-3. Generate the project:
+1. Generate the project:
 
 ```bash
 xcodegen generate
 ```
 
-4. Open and run:
+1. Open and run:
 
 ```bash
 open idx0.xcodeproj
@@ -131,19 +131,22 @@ Protocol reference:
 - [docs/contribution-guide.md](docs/contribution-guide.md)
 - [docs/style-guide.md](docs/style-guide.md)
 - [docs/testing-guide.md](docs/testing-guide.md)
+- [docs/release-runbook.md](docs/release-runbook.md)
 - [docs/architecture/deep-dive.md](docs/architecture/deep-dive.md)
 
 ## Quality Gates
 
 ```bash
-# Build + tests
-xcodebuild -project idx0.xcodeproj -scheme idx0 -destination 'platform=macOS' test
+# Install repo-managed hooks (one-time per clone)
+./scripts/install-hooks.sh
 
-# Maintainability policy gate
-./scripts/maintainability-gate.sh
+# Fast local checks (used by pre-commit)
+./scripts/presubmit.sh fast
 
-# Core coverage gate
-./scripts/coverage-core.sh
+# Full presubmit gates
+./scripts/presubmit.sh lint
+./scripts/presubmit.sh docs
+./scripts/presubmit.sh test
 ```
 
 ## Troubleshooting
@@ -151,7 +154,7 @@ xcodebuild -project idx0.xcodeproj -scheme idx0 -destination 'platform=macOS' te
 - Missing GhosttyKit framework:
   - Run `./scripts/setup.sh` and confirm it ends with `==> Done`.
 - Build errors for `metal`:
-  - Run `xcodebuild -downloadComponent MetalToolchain`.
+  - Run `xcodebuild -runFirstLaunch`.
 - CLI tools not appearing:
   - Confirm the binaries are on your shell `PATH`.
   - If launching from Xcode, verify scheme `PATH` environment values.
