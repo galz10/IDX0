@@ -115,7 +115,7 @@ Primary file: `idx0/Apps/T3Code/T3CodeRuntime.swift`
 Key capabilities:
 
 - Manifest-driven clone/build/run flow (`t3-build-manifest.json`)
-- Build reuse when artifacts and build record match pinned commit
+- Latest-source tracking with build reuse when artifacts match the current upstream commit
 - Session snapshot directories under app support
 - Runtime state surfaced to tile UI (`idle`, `building`, `live`, `failed`, etc.)
 
@@ -125,7 +125,7 @@ Primary file: `idx0/Apps/VSCode/VSCodeRuntime.swift`
 
 Key capabilities:
 
-- Manifest-driven code-server runtime install (`openvscode-build-manifest.json`)
+- Latest release resolution for code-server with bundled-manifest fallback (`openvscode-build-manifest.json`)
 - Platform-specific artifact resolution + SHA validation
 - Reusable runtime install record
 - Per-session user-data/extensions directories with profile seeding
@@ -138,7 +138,7 @@ Primary file: `idx0/Apps/Excalidraw/ExcalidrawRuntime.swift`
 Key capabilities:
 
 - Manifest-driven clone/build/run flow (`excalidraw-build-manifest.json`)
-- Build reuse when artifacts and build record match pinned commit
+- Latest-source tracking with build reuse when artifacts match the current upstream commit
 - Session-stable origin mapping via persisted loopback port assignment
 - Local static serving into `WKWebView` with retryable startup behavior
 - Runtime state surfaced to tile UI (`preparingSource`, `building`, `live`, etc.)
