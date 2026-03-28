@@ -10,13 +10,13 @@ Use this guide when publishing a new IDX0 desktop release.
 xcrun notarytool store-credentials "<profile-name>" --apple-id "<apple-id>" --team-id "<team-id>" --password "<app-specific-password>"
 ```
 
-2. Confirm your DMG signing identity exists:
+1. Confirm your DMG signing identity exists:
 
 ```bash
 security find-identity -v -p codesigning
 ```
 
-3. Confirm GitHub CLI auth:
+1. Confirm GitHub CLI auth:
 
 ```bash
 gh auth status
@@ -97,9 +97,9 @@ Notes:
 gh release view vX.Y.Z --repo galz10/IDX0
 ```
 
-2. Open release page and verify download links.
-3. Confirm `README.md` download link points to `vX.Y.Z`.
-4. If idx-web update was enabled, confirm CTA URL and `data-release-version`.
+1. Open release page and verify download links.
+2. Confirm `README.md` download link points to `vX.Y.Z`.
+3. If idx-web update was enabled, confirm CTA URL and `data-release-version`.
 
 ## 6. Recommended Command Template
 
