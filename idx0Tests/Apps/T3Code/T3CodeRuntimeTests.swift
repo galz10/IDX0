@@ -78,14 +78,27 @@ final class T3CodeRuntimeTests: XCTestCase {
 
         let paths = T3RuntimePaths(sessionID: UUID(), rootDirectoryOverride: root)
         let runner = StubProcessRunner { executable, arguments, _ in
-            guard executable == "/usr/bin/which", let tool = arguments.first else {
+            if executable == "/usr/bin/which", let tool = arguments.first {
+                if tool == "bun" {
+                    return ProcessResult(exitCode: 1, stdout: "", stderr: "not found")
+                }
+                return ProcessResult(exitCode: 0, stdout: "/usr/bin/\(tool)", stderr: "")
+            }
+
+            if executable == "/usr/bin/git", arguments.first == "clone" {
+                try FileManager.default.createDirectory(at: paths.sourceDirectory, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    at: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true),
+                    withIntermediateDirectories: true
+                )
                 return ProcessResult(exitCode: 0, stdout: "", stderr: "")
             }
 
-            if tool == "bun" {
-                return ProcessResult(exitCode: 1, stdout: "", stderr: "not found")
+            if executable == "/usr/bin/git", arguments.contains("rev-parse") {
+                return ProcessResult(exitCode: 0, stdout: "abc123\n", stderr: "")
             }
-            return ProcessResult(exitCode: 0, stdout: "/usr/bin/\(tool)", stderr: "")
+
+            return ProcessResult(exitCode: 0, stdout: "", stderr: "")
         }
         let coordinator = T3BuildCoordinator(processRunner: runner, fileManager: .default)
 
@@ -101,13 +114,17 @@ final class T3CodeRuntimeTests: XCTestCase {
         }
     }
 
-    func testBuildCoordinatorReusesExistingArtifactsWithoutInvokingRunner() async throws {
+    func testBuildCoordinatorReusesExistingArtifactsWithoutInvokingNodeOrBunChecks() async throws {
         let root = temporaryT3Root()
         defer { try? FileManager.default.removeItem(at: root) }
 
         let paths = T3RuntimePaths(sessionID: UUID(), rootDirectoryOverride: root)
         try paths.ensureBaseDirectories()
         try FileManager.default.createDirectory(at: paths.sourceDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true),
+            withIntermediateDirectories: true
+        )
 
         let manifest = T3BuildManifest(
             repositoryURL: "https://example.com/unused.git",
@@ -128,41 +145,55 @@ final class T3CodeRuntimeTests: XCTestCase {
         }
 
         struct BuildRecordMirror: Codable {
-            let pinnedCommit: String
+            let sourceCommit: String
             let entrypoint: String
             let builtAt: Date
         }
 
+        let resolvedSourceCommit = "abc123"
         let record = BuildRecordMirror(
-            pinnedCommit: manifest.pinnedCommit,
+            sourceCommit: resolvedSourceCommit,
             entrypoint: manifest.entrypoint,
             builtAt: Date()
         )
         let recordData = try JSONEncoder().encode(record)
         try recordData.write(to: paths.buildRecordPath, options: .atomic)
 
-        actor Counter {
-            var value = 0
+        actor InvocationRecorder {
+            var values: [(String, [String])] = []
 
-            func increment() {
-                value += 1
+            func append(_ value: (String, [String])) {
+                values.append(value)
             }
 
-            func current() -> Int {
-                value
+            func all() -> [(String, [String])] {
+                values
             }
         }
-        let counter = Counter()
-        let runner = StubProcessRunner { _, _, _ in
-            await counter.increment()
+
+        let recorder = InvocationRecorder()
+        let runner = StubProcessRunner { executable, arguments, _ in
+            await recorder.append((executable, arguments))
+            if executable == "/usr/bin/which", let tool = arguments.first {
+                if tool == "node" || tool == "bun" {
+                    XCTFail("Node/Bun checks should be skipped when latest build artifacts are reusable")
+                }
+                return ProcessResult(exitCode: 0, stdout: "/usr/bin/\(tool)\n", stderr: "")
+            }
+
+            if executable == "/usr/bin/git", arguments.contains("rev-parse") {
+                return ProcessResult(exitCode: 0, stdout: "\(resolvedSourceCommit)\n", stderr: "")
+            }
+
             return ProcessResult(exitCode: 0, stdout: "", stderr: "")
         }
         let coordinator = T3BuildCoordinator(processRunner: runner, fileManager: .default)
 
         let entrypoint = try await coordinator.ensureBuilt(manifest: manifest, paths: paths)
-        let invocationCount = await counter.current()
+        let invocations = await recorder.all()
         XCTAssertEqual(entrypoint.path, paths.sourceDirectory.appendingPathComponent(manifest.entrypoint, isDirectory: false).path)
-        XCTAssertEqual(invocationCount, 0)
+        XCTAssertTrue(invocations.contains(where: { $0.0 == "/usr/bin/git" && $0.1.contains("fetch") }))
+        XCTAssertFalse(invocations.contains(where: { $0.0 == "/usr/bin/git" && $0.1.contains("checkout") }))
     }
 
     private func temporaryT3Root() -> URL {

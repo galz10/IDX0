@@ -18,7 +18,7 @@ struct ExcalidrawBuildManifest: Codable, Equatable {
 
     static let `default` = ExcalidrawBuildManifest(
         repositoryURL: canonicalRepositoryURL,
-        pinnedCommit: "d6f0f34fe91a7fab25106f2b31b074c132815d36",
+        pinnedCommit: "HEAD",
         installCommand: canonicalInstallCommand,
         buildCommand: canonicalBuildCommand,
         entrypoint: canonicalEntrypoint,
@@ -162,9 +162,42 @@ enum ExcalidrawRuntimeError: LocalizedError {
 }
 
 private struct ExcalidrawBuildRecord: Codable {
-    let pinnedCommit: String
+    let sourceCommit: String
     let entrypoint: String
     let builtAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case sourceCommit
+        case pinnedCommit
+        case entrypoint
+        case builtAt
+    }
+
+    init(sourceCommit: String, entrypoint: String, builtAt: Date) {
+        self.sourceCommit = sourceCommit
+        self.entrypoint = entrypoint
+        self.builtAt = builtAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        entrypoint = try container.decode(String.self, forKey: .entrypoint)
+        builtAt = try container.decode(Date.self, forKey: .builtAt)
+        if let decodedSourceCommit = try container.decodeIfPresent(String.self, forKey: .sourceCommit) {
+            sourceCommit = decodedSourceCommit
+        } else {
+            sourceCommit = try container.decode(String.self, forKey: .pinnedCommit)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sourceCommit, forKey: .sourceCommit)
+        // Preserve compatibility with previously persisted build records.
+        try container.encode(sourceCommit, forKey: .pinnedCommit)
+        try container.encode(entrypoint, forKey: .entrypoint)
+        try container.encode(builtAt, forKey: .builtAt)
+    }
 }
 
 private struct ExcalidrawShellTool {
@@ -188,10 +221,6 @@ final class ExcalidrawBuildCoordinator {
         paths: ExcalidrawRuntimePaths,
         onStateUpdate: ((ExcalidrawTileRuntimeState) -> Void)? = nil
     ) async throws -> URL {
-        if let entrypoint = try? reusableEntrypointIfAvailable(manifest: manifest, paths: paths) {
-            return entrypoint
-        }
-
         if let existingTask = buildTask {
             return try await existingTask.value
         }
@@ -212,7 +241,11 @@ final class ExcalidrawBuildCoordinator {
         }
     }
 
-    private func reusableEntrypointIfAvailable(manifest: ExcalidrawBuildManifest, paths: ExcalidrawRuntimePaths) throws -> URL {
+    private func reusableEntrypointIfAvailable(
+        sourceCommit: String,
+        manifest: ExcalidrawBuildManifest,
+        paths: ExcalidrawRuntimePaths
+    ) throws -> URL {
         guard fileManager.fileExists(atPath: paths.buildRecordPath.path) else {
             throw ExcalidrawRuntimeError.missingArtifact(paths.buildRecordPath.path)
         }
@@ -220,8 +253,8 @@ final class ExcalidrawBuildCoordinator {
         let data = try Data(contentsOf: paths.buildRecordPath)
         let record = try JSONDecoder().decode(ExcalidrawBuildRecord.self, from: data)
 
-        guard record.pinnedCommit == manifest.pinnedCommit else {
-            throw ExcalidrawRuntimeError.missingArtifact(manifest.pinnedCommit)
+        guard record.sourceCommit == sourceCommit else {
+            throw ExcalidrawRuntimeError.missingArtifact(sourceCommit)
         }
 
         for artifact in manifest.requiredArtifacts {
@@ -257,20 +290,22 @@ final class ExcalidrawBuildCoordinator {
         defer { try? fileManager.removeItem(at: paths.buildLockPath) }
 
         let resolvedGitPath = try await ensureToolAvailable("git", paths: paths)
-        let resolvedNodePath = try await ensureToolAvailable("node", paths: paths)
-        let resolvedYarnTool = try await resolveYarnTool(paths: paths, resolvedNodePath: resolvedNodePath)
-        let preferredToolDirectories = uniqueParentDirectories(
-            for: [resolvedGitPath, resolvedNodePath, resolvedYarnTool.executablePath]
-        )
 
         if fileManager.fileExists(atPath: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true).path) {
             appendBuildLog(paths: paths, line: "Refreshing existing repository")
-            try await runChecked(
-                executable: resolvedGitPath,
-                arguments: ["-C", paths.sourceDirectory.path, "fetch", "--all", "--tags"],
-                currentDirectory: paths.sourceDirectory.path,
-                paths: paths
-            )
+            do {
+                try await runChecked(
+                    executable: resolvedGitPath,
+                    arguments: ["-C", paths.sourceDirectory.path, "fetch", "--all", "--tags"],
+                    currentDirectory: paths.sourceDirectory.path,
+                    paths: paths
+                )
+            } catch {
+                appendBuildLog(
+                    paths: paths,
+                    line: "Fetch failed; continuing with locally cached source: \(error.localizedDescription)"
+                )
+            }
         } else {
             appendBuildLog(paths: paths, line: "Cloning repository")
             try await runChecked(
@@ -281,9 +316,29 @@ final class ExcalidrawBuildCoordinator {
             )
         }
 
+        let resolvedSourceCommit = try await resolveLatestSourceCommit(
+            resolvedGitPath: resolvedGitPath,
+            manifest: manifest,
+            paths: paths
+        )
+        if let entrypoint = try? reusableEntrypointIfAvailable(
+            sourceCommit: resolvedSourceCommit,
+            manifest: manifest,
+            paths: paths
+        ) {
+            appendBuildLog(paths: paths, line: "Reusing existing build for source commit \(resolvedSourceCommit)")
+            return entrypoint
+        }
+
+        let resolvedNodePath = try await ensureToolAvailable("node", paths: paths)
+        let resolvedYarnTool = try await resolveYarnTool(paths: paths, resolvedNodePath: resolvedNodePath)
+        let preferredToolDirectories = uniqueParentDirectories(
+            for: [resolvedGitPath, resolvedNodePath, resolvedYarnTool.executablePath]
+        )
+
         try await runChecked(
             executable: resolvedGitPath,
-            arguments: ["-C", paths.sourceDirectory.path, "checkout", manifest.pinnedCommit],
+            arguments: ["-C", paths.sourceDirectory.path, "checkout", "--force", resolvedSourceCommit],
             currentDirectory: paths.sourceDirectory.path,
             paths: paths
         )
@@ -325,7 +380,7 @@ final class ExcalidrawBuildCoordinator {
         }
 
         let record = ExcalidrawBuildRecord(
-            pinnedCommit: manifest.pinnedCommit,
+            sourceCommit: resolvedSourceCommit,
             entrypoint: manifest.entrypoint,
             builtAt: Date()
         )
@@ -341,6 +396,52 @@ final class ExcalidrawBuildCoordinator {
         }
 
         return entrypointURL
+    }
+
+    private func resolveLatestSourceCommit(
+        resolvedGitPath: String,
+        manifest: ExcalidrawBuildManifest,
+        paths: ExcalidrawRuntimePaths
+    ) async throws -> String {
+        for candidateRef in [
+            "origin/HEAD",
+            "origin/main",
+            "HEAD",
+            manifest.pinnedCommit
+        ] {
+            guard let resolved = try await revParse(
+                resolvedGitPath: resolvedGitPath,
+                ref: candidateRef,
+                paths: paths
+            ) else {
+                continue
+            }
+            appendBuildLog(paths: paths, line: "Resolved source revision \(candidateRef) -> \(resolved)")
+            return resolved
+        }
+
+        throw ExcalidrawRuntimeError.missingArtifact("unable to resolve source revision")
+    }
+
+    private func revParse(
+        resolvedGitPath: String,
+        ref: String,
+        paths: ExcalidrawRuntimePaths
+    ) async throws -> String? {
+        let result = try await runLogged(
+            executable: resolvedGitPath,
+            arguments: ["-C", paths.sourceDirectory.path, "rev-parse", ref],
+            currentDirectory: paths.sourceDirectory.path,
+            paths: paths
+        )
+        guard result.exitCode == 0 else {
+            return nil
+        }
+
+        return result.stdout
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty })
     }
 
     private func ensureToolAvailable(_ tool: String, paths: ExcalidrawRuntimePaths) async throws -> String {
@@ -513,6 +614,28 @@ final class ExcalidrawBuildCoordinator {
         currentDirectory: String?,
         paths: ExcalidrawRuntimePaths
     ) async throws {
+        let result = try await runLogged(
+            executable: executable,
+            arguments: arguments,
+            currentDirectory: currentDirectory,
+            paths: paths
+        )
+        guard result.exitCode == 0 else {
+            let command = ([executable] + arguments).joined(separator: " ")
+            throw ExcalidrawRuntimeError.commandFailed(
+                command: command,
+                code: result.exitCode,
+                stderr: result.stderr.isEmpty ? nil : result.stderr
+            )
+        }
+    }
+
+    private func runLogged(
+        executable: String,
+        arguments: [String],
+        currentDirectory: String?,
+        paths: ExcalidrawRuntimePaths
+    ) async throws -> ProcessResult {
         let command = ([executable] + arguments).joined(separator: " ")
         appendBuildLog(paths: paths, line: "$ \(command)")
 
@@ -528,14 +651,7 @@ final class ExcalidrawBuildCoordinator {
         if !result.stderr.isEmpty {
             appendBuildLog(paths: paths, line: result.stderr)
         }
-
-        guard result.exitCode == 0 else {
-            throw ExcalidrawRuntimeError.commandFailed(
-                command: command,
-                code: result.exitCode,
-                stderr: result.stderr.isEmpty ? nil : result.stderr
-            )
-        }
+        return result
     }
 
     private func appendBuildLog(paths: ExcalidrawRuntimePaths, line: String) {

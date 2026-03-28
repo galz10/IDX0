@@ -66,6 +66,19 @@ final class ExcalidrawRuntimeTests: XCTestCase {
                 }
             }
 
+            if executable == "/usr/bin/git", arguments.first == "clone" {
+                try FileManager.default.createDirectory(at: paths.sourceDirectory, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    at: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true),
+                    withIntermediateDirectories: true
+                )
+                return ProcessResult(exitCode: 0, stdout: "", stderr: "")
+            }
+
+            if executable == "/usr/bin/git", arguments.contains("rev-parse") {
+                return ProcessResult(exitCode: 0, stdout: "abc123\n", stderr: "")
+            }
+
             if executable == "/bin/zsh",
                arguments == ["-lc", "whence -p yarn"] || arguments == ["-ilc", "whence -p yarn"] {
                 return ProcessResult(exitCode: 1, stdout: "", stderr: "not found")
@@ -99,13 +112,17 @@ final class ExcalidrawRuntimeTests: XCTestCase {
         }
     }
 
-    func testBuildCoordinatorReusesExistingArtifactsWithoutInvokingRunner() async throws {
+    func testBuildCoordinatorReusesExistingArtifactsWithoutInvokingNodeOrYarnChecks() async throws {
         let root = temporaryExcalidrawRoot()
         defer { try? FileManager.default.removeItem(at: root) }
 
         let paths = ExcalidrawRuntimePaths(sessionID: UUID(), rootDirectoryOverride: root)
         try paths.ensureBaseDirectories()
         try FileManager.default.createDirectory(at: paths.sourceDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true),
+            withIntermediateDirectories: true
+        )
 
         let manifest = ExcalidrawBuildManifest(
             repositoryURL: "https://example.com/unused.git",
@@ -123,44 +140,55 @@ final class ExcalidrawRuntimeTests: XCTestCase {
         }
 
         struct BuildRecordMirror: Codable {
-            let pinnedCommit: String
+            let sourceCommit: String
             let entrypoint: String
             let builtAt: Date
         }
 
+        let resolvedSourceCommit = "abc123"
         let record = BuildRecordMirror(
-            pinnedCommit: manifest.pinnedCommit,
+            sourceCommit: resolvedSourceCommit,
             entrypoint: manifest.entrypoint,
             builtAt: Date()
         )
         let recordData = try JSONEncoder().encode(record)
         try recordData.write(to: paths.buildRecordPath, options: .atomic)
 
-        actor Counter {
-            var value = 0
+        actor InvocationRecorder {
+            var values: [(String, [String])] = []
 
-            func increment() {
-                value += 1
+            func append(_ value: (String, [String])) {
+                values.append(value)
             }
 
-            func current() -> Int {
-                value
+            func all() -> [(String, [String])] {
+                values
             }
         }
-        let counter = Counter()
-        let runner = StubExcalidrawProcessRunner { _, _, _ in
-            await counter.increment()
+        let recorder = InvocationRecorder()
+        let runner = StubExcalidrawProcessRunner { executable, arguments, _ in
+            await recorder.append((executable, arguments))
+            if executable == "/usr/bin/which", let tool = arguments.first {
+                if tool == "node" || tool == "yarn" {
+                    XCTFail("Node/Yarn checks should be skipped when latest build artifacts are reusable")
+                }
+                return ProcessResult(exitCode: 0, stdout: "/usr/bin/\(tool)\n", stderr: "")
+            }
+            if executable == "/usr/bin/git", arguments.contains("rev-parse") {
+                return ProcessResult(exitCode: 0, stdout: "\(resolvedSourceCommit)\n", stderr: "")
+            }
             return ProcessResult(exitCode: 0, stdout: "", stderr: "")
         }
         let coordinator = ExcalidrawBuildCoordinator(processRunner: runner, fileManager: .default)
 
         let entrypoint = try await coordinator.ensureBuilt(manifest: manifest, paths: paths)
-        let invocationCount = await counter.current()
+        let invocations = await recorder.all()
         XCTAssertEqual(
             entrypoint.path,
             paths.sourceDirectory.appendingPathComponent(manifest.entrypoint, isDirectory: false).path
         )
-        XCTAssertEqual(invocationCount, 0)
+        XCTAssertTrue(invocations.contains(where: { $0.0 == "/usr/bin/git" && $0.1.contains("fetch") }))
+        XCTAssertFalse(invocations.contains(where: { $0.0 == "/usr/bin/git" && $0.1.contains("checkout") }))
     }
 
     func testBuildCoordinatorUsesNonInteractiveShellForYarnCommands() async throws {
@@ -197,6 +225,10 @@ final class ExcalidrawRuntimeTests: XCTestCase {
                     at: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true),
                     withIntermediateDirectories: true
                 )
+            }
+
+            if executable == "/usr/bin/git", arguments.contains("rev-parse") {
+                return ProcessResult(exitCode: 0, stdout: "abc123\n", stderr: "")
             }
 
             if executable == "/bin/zsh",
@@ -276,6 +308,10 @@ final class ExcalidrawRuntimeTests: XCTestCase {
                     at: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true),
                     withIntermediateDirectories: true
                 )
+            }
+
+            if executable == resolvedGitPath, arguments.contains("rev-parse") {
+                return ProcessResult(exitCode: 0, stdout: "abc123\n", stderr: "")
             }
 
             if executable == "/bin/zsh",
@@ -378,6 +414,10 @@ final class ExcalidrawRuntimeTests: XCTestCase {
                     at: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true),
                     withIntermediateDirectories: true
                 )
+            }
+
+            if executable == "/usr/bin/git", arguments.contains("rev-parse") {
+                return ProcessResult(exitCode: 0, stdout: "abc123\n", stderr: "")
             }
 
             if executable == "/bin/zsh",

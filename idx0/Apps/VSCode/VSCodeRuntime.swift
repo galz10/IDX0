@@ -65,6 +65,154 @@ struct VSCodeBuildManifest: Codable, Equatable, Sendable {
     }
 }
 
+private struct GitHubReleaseAsset: Decodable, Sendable {
+    let name: String
+    let browserDownloadURL: String
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case browserDownloadURL = "browser_download_url"
+    }
+}
+
+private struct GitHubRelease: Decodable, Sendable {
+    let tagName: String
+    let assets: [GitHubReleaseAsset]
+
+    private enum CodingKeys: String, CodingKey {
+        case tagName = "tag_name"
+        case assets
+    }
+}
+
+private enum VSCodeLatestManifestResolutionError: LocalizedError {
+    case invalidResponse(statusCode: Int)
+    case missingArchiveAsset(platform: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse(let statusCode):
+            return "GitHub latest release request failed with status \(statusCode)"
+        case .missingArchiveAsset(let platform):
+            return "Latest release is missing a code-server archive for \(platform)"
+        }
+    }
+}
+
+actor VSCodeLatestManifestResolver {
+    private let session: URLSession
+    private let decoder: JSONDecoder
+
+    init(session: URLSession = .shared, decoder: JSONDecoder = JSONDecoder()) {
+        self.session = session
+        self.decoder = decoder
+    }
+
+    func resolveLatestManifest(fallback: VSCodeBuildManifest) async -> VSCodeBuildManifest {
+        do {
+            return try await fetchLatestManifest(fallback: fallback)
+        } catch {
+            Logger.error("Failed to resolve latest VS Code runtime manifest; using bundled manifest: \(error.localizedDescription)")
+            return fallback
+        }
+    }
+
+    private func fetchLatestManifest(fallback: VSCodeBuildManifest) async throws -> VSCodeBuildManifest {
+        guard let releaseURL = URL(string: "https://api.github.com/repos/coder/code-server/releases/latest") else {
+            return fallback
+        }
+
+        var request = URLRequest(url: releaseURL)
+        request.timeoutInterval = 10
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("idx0-runtime", forHTTPHeaderField: "User-Agent")
+
+        let (releaseData, releaseResponse) = try await session.data(for: request)
+        let statusCode = (releaseResponse as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(statusCode) else {
+            throw VSCodeLatestManifestResolutionError.invalidResponse(statusCode: statusCode)
+        }
+
+        let release = try decoder.decode(GitHubRelease.self, from: releaseData)
+        let platform = VSCodeBuildManifest.currentPlatformIdentifier()
+        let suffix = "-\(platform).tar.gz"
+        guard let archiveAsset = release.assets.first(where: { asset in
+            asset.name.hasPrefix("code-server-") && asset.name.hasSuffix(suffix)
+        }) else {
+            throw VSCodeLatestManifestResolutionError.missingArchiveAsset(platform: platform)
+        }
+
+        let extractDirectoryName = archiveAsset.name.replacingOccurrences(of: ".tar.gz", with: "")
+        let resolvedVersion = extractDirectoryName
+            .replacingOccurrences(of: "code-server-", with: "")
+            .replacingOccurrences(of: "-\(platform)", with: "")
+        let resolvedChecksum = await resolveChecksum(
+            release: release,
+            archiveAssetName: archiveAsset.name
+        ) ?? ""
+
+        return VSCodeBuildManifest(
+            runtimeName: fallback.runtimeName,
+            version: resolvedVersion,
+            executableRelativePath: fallback.executableRelativePath,
+            artifacts: [
+                VSCodeArtifactManifest(
+                    platform: platform,
+                    downloadURL: archiveAsset.browserDownloadURL,
+                    sha256: resolvedChecksum,
+                    extractDirectoryName: extractDirectoryName
+                )
+            ]
+        )
+    }
+
+    private func resolveChecksum(
+        release: GitHubRelease,
+        archiveAssetName: String
+    ) async -> String? {
+        let checksumAssetNames = ["SHA256SUMS", "SHA256SUMS.txt"]
+        guard let checksumAsset = release.assets.first(where: { checksumAssetNames.contains($0.name) }),
+              let checksumURL = URL(string: checksumAsset.browserDownloadURL) else {
+            return nil
+        }
+
+        do {
+            let (checksumData, response) = try await session.data(from: checksumURL)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            guard (200..<300).contains(statusCode),
+                  let checksumBody = String(data: checksumData, encoding: .utf8) else {
+                return nil
+            }
+            return parseChecksum(checksumBody, archiveAssetName: archiveAssetName)
+        } catch {
+            return nil
+        }
+    }
+
+    private func parseChecksum(_ body: String, archiveAssetName: String) -> String? {
+        for rawLine in body.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+
+            let tokens = line
+                .split(whereSeparator: \.isWhitespace)
+                .map(String.init)
+            guard tokens.count >= 2 else { continue }
+
+            let hash = tokens[0].lowercased()
+            var filename = tokens[tokens.count - 1]
+            if filename.hasPrefix("*") || filename.hasPrefix("./") {
+                filename = String(filename.drop(while: { $0 == "*" || $0 == "." || $0 == "/" }))
+            }
+
+            if filename == archiveAssetName {
+                return hash
+            }
+        }
+        return nil
+    }
+}
+
 struct VSCodeRuntimePaths: Sendable {
     let rootDirectory: URL
     let runtimeDirectory: URL
@@ -250,10 +398,14 @@ actor OpenVSCodeProvisioner {
         guard record.runtimeName == manifest.runtimeName,
               record.version == manifest.version,
               record.platform == currentPlatform,
-              let artifact = manifest.artifact(forCurrentPlatform: currentPlatform),
-              record.sha256.lowercased() == artifact.sha256.lowercased()
+              let artifact = manifest.artifact(forCurrentPlatform: currentPlatform)
         else {
             throw VSCodeRuntimeError.missingExecutable("runtime manifest mismatch")
+        }
+
+        let expectedSHA = artifact.sha256.lowercased()
+        if !expectedSHA.isEmpty && record.sha256.lowercased() != expectedSHA {
+            throw VSCodeRuntimeError.missingExecutable("runtime checksum mismatch")
         }
 
         let runtimeDirectory = paths.runtimeVersionsDirectory.appendingPathComponent(record.runtimeDirectoryName, isDirectory: true)
@@ -303,7 +455,7 @@ actor OpenVSCodeProvisioner {
 
         let actualSHA = try sha256(forFileAt: archiveURL)
         let expectedSHA = artifact.sha256.lowercased()
-        guard actualSHA == expectedSHA else {
+        if !expectedSHA.isEmpty, actualSHA != expectedSHA {
             try? fileManager.removeItem(at: archiveURL)
             throw VSCodeRuntimeError.checksumMismatch(expected: expectedSHA, actual: actualSHA)
         }
@@ -328,7 +480,7 @@ actor OpenVSCodeProvisioner {
             runtimeName: manifest.runtimeName,
             version: manifest.version,
             platform: currentPlatform,
-            sha256: expectedSHA,
+            sha256: expectedSHA.isEmpty ? actualSHA : expectedSHA,
             runtimeDirectoryName: artifact.extractDirectoryName,
             executableRelativePath: manifest.executableRelativePath,
             installedAt: Date()
@@ -614,6 +766,7 @@ final class VSCodeTileController: ObservableObject, NiriAppTileRuntimeControllin
     private let launchDirectoryProvider: () -> String?
     private let profileSeedPathProvider: () -> String?
     private let provisioner: OpenVSCodeProvisioner
+    private let latestManifestResolver: VSCodeLatestManifestResolver
     private let snapshotManager: VSCodeStateSnapshotManager
     private let processRunner: any ProcessRunnerProtocol
     private let manifestProvider: () -> VSCodeBuildManifest
@@ -645,6 +798,7 @@ final class VSCodeTileController: ObservableObject, NiriAppTileRuntimeControllin
         launchDirectoryProvider: @escaping () -> String?,
         profileSeedPathProvider: @escaping () -> String?,
         provisioner: OpenVSCodeProvisioner,
+        latestManifestResolver: VSCodeLatestManifestResolver = VSCodeLatestManifestResolver(),
         snapshotManager: VSCodeStateSnapshotManager,
         processRunner: any ProcessRunnerProtocol = ProcessRunner(),
         manifestProvider: @escaping () -> VSCodeBuildManifest = { VSCodeBuildManifest.loadFromBundle() },
@@ -655,6 +809,7 @@ final class VSCodeTileController: ObservableObject, NiriAppTileRuntimeControllin
         self.launchDirectoryProvider = launchDirectoryProvider
         self.profileSeedPathProvider = profileSeedPathProvider
         self.provisioner = provisioner
+        self.latestManifestResolver = latestManifestResolver
         self.snapshotManager = snapshotManager
         self.processRunner = processRunner
         self.manifestProvider = manifestProvider
@@ -730,10 +885,11 @@ final class VSCodeTileController: ObservableObject, NiriAppTileRuntimeControllin
     }
 
     private func runStartupSequence() async {
-        let manifest = manifestProvider()
-
         while !Task.isCancelled {
             do {
+                let manifest = await latestManifestResolver.resolveLatestManifest(
+                    fallback: manifestProvider()
+                )
                 try await startupAttempt(manifest: manifest)
                 automaticRestartCount = 0
                 return

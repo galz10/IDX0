@@ -18,7 +18,7 @@ struct T3BuildManifest: Codable, Equatable {
 
     static let `default` = T3BuildManifest(
         repositoryURL: canonicalRepositoryURL,
-        pinnedCommit: "2a237c20019a",
+        pinnedCommit: "HEAD",
         installCommand: "bun install --frozen-lockfile",
         buildCommand: canonicalBuildCommand,
         entrypoint: canonicalEntrypoint,
@@ -189,9 +189,42 @@ enum T3RuntimeError: LocalizedError {
 }
 
 private struct T3BuildRecord: Codable {
-    let pinnedCommit: String
+    let sourceCommit: String
     let entrypoint: String
     let builtAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case sourceCommit
+        case pinnedCommit
+        case entrypoint
+        case builtAt
+    }
+
+    init(sourceCommit: String, entrypoint: String, builtAt: Date) {
+        self.sourceCommit = sourceCommit
+        self.entrypoint = entrypoint
+        self.builtAt = builtAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        entrypoint = try container.decode(String.self, forKey: .entrypoint)
+        builtAt = try container.decode(Date.self, forKey: .builtAt)
+        if let decodedSourceCommit = try container.decodeIfPresent(String.self, forKey: .sourceCommit) {
+            sourceCommit = decodedSourceCommit
+        } else {
+            sourceCommit = try container.decode(String.self, forKey: .pinnedCommit)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sourceCommit, forKey: .sourceCommit)
+        // Preserve compatibility with previously persisted build records.
+        try container.encode(sourceCommit, forKey: .pinnedCommit)
+        try container.encode(entrypoint, forKey: .entrypoint)
+        try container.encode(builtAt, forKey: .builtAt)
+    }
 }
 
 @MainActor
@@ -210,10 +243,6 @@ final class T3BuildCoordinator {
         paths: T3RuntimePaths,
         onStateUpdate: ((T3TileRuntimeState) -> Void)? = nil
     ) async throws -> URL {
-        if let entrypoint = try? reusableEntrypointIfAvailable(manifest: manifest, paths: paths) {
-            return entrypoint
-        }
-
         if let existingTask = buildTask {
             return try await existingTask.value
         }
@@ -234,7 +263,11 @@ final class T3BuildCoordinator {
         }
     }
 
-    private func reusableEntrypointIfAvailable(manifest: T3BuildManifest, paths: T3RuntimePaths) throws -> URL {
+    private func reusableEntrypointIfAvailable(
+        sourceCommit: String,
+        manifest: T3BuildManifest,
+        paths: T3RuntimePaths
+    ) throws -> URL {
         guard fileManager.fileExists(atPath: paths.buildRecordPath.path) else {
             throw T3RuntimeError.missingArtifact(paths.buildRecordPath.path)
         }
@@ -242,8 +275,8 @@ final class T3BuildCoordinator {
         let data = try Data(contentsOf: paths.buildRecordPath)
         let record = try JSONDecoder().decode(T3BuildRecord.self, from: data)
 
-        guard record.pinnedCommit == manifest.pinnedCommit else {
-            throw T3RuntimeError.missingArtifact(manifest.pinnedCommit)
+        guard record.sourceCommit == sourceCommit else {
+            throw T3RuntimeError.missingArtifact(sourceCommit)
         }
 
         for artifact in manifest.requiredArtifacts {
@@ -279,17 +312,22 @@ final class T3BuildCoordinator {
         defer { try? fileManager.removeItem(at: paths.buildLockPath) }
 
         try await ensureToolAvailable("git", paths: paths)
-        try await ensureToolAvailable("node", paths: paths)
-        try await ensureToolAvailable("bun", paths: paths)
 
         if fileManager.fileExists(atPath: paths.sourceDirectory.appendingPathComponent(".git", isDirectory: true).path) {
             appendBuildLog(paths: paths, line: "Refreshing existing repository")
-            try await runChecked(
-                executable: "/usr/bin/git",
-                arguments: ["-C", paths.sourceDirectory.path, "fetch", "--all", "--tags"],
-                currentDirectory: paths.sourceDirectory.path,
-                paths: paths
-            )
+            do {
+                try await runChecked(
+                    executable: "/usr/bin/git",
+                    arguments: ["-C", paths.sourceDirectory.path, "fetch", "--all", "--tags"],
+                    currentDirectory: paths.sourceDirectory.path,
+                    paths: paths
+                )
+            } catch {
+                appendBuildLog(
+                    paths: paths,
+                    line: "Fetch failed; continuing with locally cached source: \(error.localizedDescription)"
+                )
+            }
         } else {
             appendBuildLog(paths: paths, line: "Cloning repository")
             try await runChecked(
@@ -300,9 +338,22 @@ final class T3BuildCoordinator {
             )
         }
 
+        let resolvedSourceCommit = try await resolveLatestSourceCommit(manifest: manifest, paths: paths)
+        if let entrypoint = try? reusableEntrypointIfAvailable(
+            sourceCommit: resolvedSourceCommit,
+            manifest: manifest,
+            paths: paths
+        ) {
+            appendBuildLog(paths: paths, line: "Reusing existing build for source commit \(resolvedSourceCommit)")
+            return entrypoint
+        }
+
+        try await ensureToolAvailable("node", paths: paths)
+        try await ensureToolAvailable("bun", paths: paths)
+
         try await runChecked(
             executable: "/usr/bin/git",
-            arguments: ["-C", paths.sourceDirectory.path, "checkout", manifest.pinnedCommit],
+            arguments: ["-C", paths.sourceDirectory.path, "checkout", "--force", resolvedSourceCommit],
             currentDirectory: paths.sourceDirectory.path,
             paths: paths
         )
@@ -345,7 +396,7 @@ final class T3BuildCoordinator {
         }
 
         let record = T3BuildRecord(
-            pinnedCommit: manifest.pinnedCommit,
+            sourceCommit: resolvedSourceCommit,
             entrypoint: manifest.entrypoint,
             builtAt: Date()
         )
@@ -361,6 +412,40 @@ final class T3BuildCoordinator {
         }
 
         return entrypointURL
+    }
+
+    private func resolveLatestSourceCommit(manifest: T3BuildManifest, paths: T3RuntimePaths) async throws -> String {
+        for candidateRef in [
+            "origin/HEAD",
+            "origin/main",
+            "HEAD",
+            manifest.pinnedCommit
+        ] {
+            guard let resolved = try await revParse(candidateRef, paths: paths) else {
+                continue
+            }
+            appendBuildLog(paths: paths, line: "Resolved source revision \(candidateRef) -> \(resolved)")
+            return resolved
+        }
+
+        throw T3RuntimeError.missingArtifact("unable to resolve source revision")
+    }
+
+    private func revParse(_ ref: String, paths: T3RuntimePaths) async throws -> String? {
+        let result = try await runLogged(
+            executable: "/usr/bin/git",
+            arguments: ["-C", paths.sourceDirectory.path, "rev-parse", ref],
+            currentDirectory: paths.sourceDirectory.path,
+            paths: paths
+        )
+        guard result.exitCode == 0 else {
+            return nil
+        }
+
+        return result.stdout
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty })
     }
 
     private func ensureToolAvailable(_ tool: String, paths: T3RuntimePaths) async throws {
@@ -410,6 +495,28 @@ final class T3BuildCoordinator {
         currentDirectory: String?,
         paths: T3RuntimePaths
     ) async throws {
+        let result = try await runLogged(
+            executable: executable,
+            arguments: arguments,
+            currentDirectory: currentDirectory,
+            paths: paths
+        )
+        guard result.exitCode == 0 else {
+            let command = ([executable] + arguments).joined(separator: " ")
+            throw T3RuntimeError.commandFailed(
+                command: command,
+                code: result.exitCode,
+                stderr: result.stderr.isEmpty ? nil : result.stderr
+            )
+        }
+    }
+
+    private func runLogged(
+        executable: String,
+        arguments: [String],
+        currentDirectory: String?,
+        paths: T3RuntimePaths
+    ) async throws -> ProcessResult {
         let command = ([executable] + arguments).joined(separator: " ")
         appendBuildLog(paths: paths, line: "$ \(command)")
 
@@ -425,14 +532,7 @@ final class T3BuildCoordinator {
         if !result.stderr.isEmpty {
             appendBuildLog(paths: paths, line: result.stderr)
         }
-
-        guard result.exitCode == 0 else {
-            throw T3RuntimeError.commandFailed(
-                command: command,
-                code: result.exitCode,
-                stderr: result.stderr.isEmpty ? nil : result.stderr
-            )
-        }
+        return result
     }
 
     private func appendBuildLog(paths: T3RuntimePaths, line: String) {
