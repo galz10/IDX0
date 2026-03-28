@@ -9,6 +9,7 @@ DEFAULT_VERSION="$(awk '/MARKETING_VERSION:/ {print $2; exit}' project.yml 2>/de
 if [[ -z "${DEFAULT_VERSION:-}" ]]; then
   DEFAULT_VERSION="0.0.1"
 fi
+DEFAULT_APPCAST_FEED_URL="$(awk '/INFOPLIST_KEY_SUFeedURL:/ {print $2; exit}' project.yml 2>/dev/null || true)"
 
 VERSION=""
 VERSION_WAS_SET=0
@@ -26,6 +27,14 @@ IDX_WEB_INDEX_DEFAULT_PATH="/Users/gal/Documents/Github/idx-web/index.html"
 IDX_WEB_INDEX_PATH="${IDX_WEB_INDEX_PATH:-$IDX_WEB_INDEX_DEFAULT_PATH}"
 REQUIRE_IDX_WEB_UPDATE=0
 README_PATH="$ROOT_DIR/README.md"
+RUN_APPCAST=1
+APPCAST_REPO="${APPCAST_REPO:-}"
+APPCAST_DOWNLOAD_BASE_URL="${APPCAST_DOWNLOAD_BASE_URL:-}"
+APPCAST_BRANCH="${APPCAST_BRANCH:-}"
+APPCAST_TITLE="${APPCAST_TITLE:-IDX0}"
+APPCAST_MIN_SYSTEM_VERSION="${APPCAST_MIN_SYSTEM_VERSION:-14.0}"
+APPCAST_SIGNATURE="${APPCAST_SIGNATURE:-}"
+APPCAST_NO_PUSH=0
 
 COMMITTED_REPOS=()
 PUSHED_REPOS=()
@@ -52,6 +61,14 @@ Options:
   --no-push-tag               Do not push tag to origin
   --idx-web-index <path>      Override idx-web download target (default: /Users/gal/Documents/Github/idx-web/index.html)
   --require-idx-web-update    Fail if idx-web update cannot run
+  --skip-appcast              Skip appcast publish automation
+  --appcast-repo <git-url>    Override appcast repository URL
+  --appcast-download-base-url <url>  Override appcast public download base URL
+  --appcast-branch <name>     Override appcast branch (default: inferred or main)
+  --appcast-title <text>      Appcast title. Default: IDX0
+  --appcast-minimum-system-version <ver>  Sparkle minimum system version. Default: 14.0
+  --appcast-signature <sig>   Optional Sparkle EdDSA signature for appcast enclosure
+  --appcast-no-push           Publish appcast commit locally but skip push
   --open                      Open the release page in browser after create/update
   -h, --help                  Show this help text
 
@@ -88,6 +105,32 @@ resolve_artifact_path() {
     echo "$fallback"
     return 0
   fi
+  return 1
+}
+
+infer_appcast_defaults_from_feed_url() {
+  local feed_url="$1"
+  if [[ -z "$feed_url" ]]; then
+    return 1
+  fi
+
+  if [[ "$feed_url" =~ ^https://raw\.githubusercontent\.com/([^/]+)/([^/]+)/([^/]+)/appcast\.xml$ ]]; then
+    local owner="${BASH_REMATCH[1]}"
+    local repo_name="${BASH_REMATCH[2]}"
+    local inferred_branch="${BASH_REMATCH[3]}"
+
+    if [[ -z "$APPCAST_REPO" ]]; then
+      APPCAST_REPO="https://github.com/${owner}/${repo_name}.git"
+    fi
+    if [[ -z "$APPCAST_BRANCH" ]]; then
+      APPCAST_BRANCH="$inferred_branch"
+    fi
+    if [[ -z "$APPCAST_DOWNLOAD_BASE_URL" ]]; then
+      APPCAST_DOWNLOAD_BASE_URL="https://raw.githubusercontent.com/${owner}/${repo_name}/${APPCAST_BRANCH}"
+    fi
+    return 0
+  fi
+
   return 1
 }
 
@@ -140,6 +183,38 @@ while [[ $# -gt 0 ]]; do
       ;;
     --require-idx-web-update)
       REQUIRE_IDX_WEB_UPDATE=1
+      shift
+      ;;
+    --skip-appcast)
+      RUN_APPCAST=0
+      shift
+      ;;
+    --appcast-repo)
+      APPCAST_REPO="${2:-}"
+      shift 2
+      ;;
+    --appcast-download-base-url)
+      APPCAST_DOWNLOAD_BASE_URL="${2:-}"
+      shift 2
+      ;;
+    --appcast-branch)
+      APPCAST_BRANCH="${2:-}"
+      shift 2
+      ;;
+    --appcast-title)
+      APPCAST_TITLE="${2:-}"
+      shift 2
+      ;;
+    --appcast-minimum-system-version)
+      APPCAST_MIN_SYSTEM_VERSION="${2:-}"
+      shift 2
+      ;;
+    --appcast-signature)
+      APPCAST_SIGNATURE="${2:-}"
+      shift 2
+      ;;
+    --appcast-no-push)
+      APPCAST_NO_PUSH=1
       shift
       ;;
     --open)
@@ -385,6 +460,22 @@ if [[ -z "$REPO" ]]; then
   REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
 fi
 
+if [[ "$RUN_APPCAST" -eq 1 ]]; then
+  infer_appcast_defaults_from_feed_url "$DEFAULT_APPCAST_FEED_URL" || true
+
+  if [[ -z "$APPCAST_BRANCH" ]]; then
+    APPCAST_BRANCH="main"
+  fi
+
+  if [[ -z "$APPCAST_REPO" || -z "$APPCAST_DOWNLOAD_BASE_URL" ]]; then
+    echo "error: appcast publish is enabled but appcast config is incomplete." >&2
+    echo "hint: pass --appcast-repo and --appcast-download-base-url." >&2
+    echo "hint: or set project.yml INFOPLIST_KEY_SUFeedURL to raw.githubusercontent.com/<owner>/<repo>/<branch>/appcast.xml so defaults can be inferred." >&2
+    echo "hint: use --skip-appcast to skip appcast publishing." >&2
+    exit 1
+  fi
+fi
+
 DMG_PATH="$(resolve_artifact_path "$DIST_DIR/IDX0-${VERSION}.dmg" "$DIST_DIR/idx0-${VERSION}.dmg" || true)"
 ZIP_PATH="$(resolve_artifact_path "$DIST_DIR/IDX0-${VERSION}-mac.zip" "$DIST_DIR/idx0-${VERSION}-mac.zip" || true)"
 TAR_PATH="$(resolve_artifact_path "$DIST_DIR/IDX0-${VERSION}-mac.tar.gz" "$DIST_DIR/idx0-${VERSION}-mac.tar.gz" || true)"
@@ -463,6 +554,33 @@ else
   gh release create "${CREATE_ARGS[@]}"
 fi
 
+if [[ "$RUN_APPCAST" -eq 1 ]]; then
+  echo "==> Publishing appcast"
+  APPCAST_ARGS=(
+    --version "$VERSION"
+    --zip "$ZIP_PATH"
+    --appcast-repo "$APPCAST_REPO"
+    --download-base-url "$APPCAST_DOWNLOAD_BASE_URL"
+    --branch "$APPCAST_BRANCH"
+    --title "$APPCAST_TITLE"
+    --minimum-system-version "$APPCAST_MIN_SYSTEM_VERSION"
+  )
+
+  if [[ "$PRERELEASE" -eq 1 ]]; then
+    APPCAST_ARGS+=(--prerelease)
+  fi
+
+  if [[ -n "$APPCAST_SIGNATURE" ]]; then
+    APPCAST_ARGS+=(--signature "$APPCAST_SIGNATURE")
+  fi
+
+  if [[ "$APPCAST_NO_PUSH" -eq 1 ]]; then
+    APPCAST_ARGS+=(--no-push)
+  fi
+
+  "$SCRIPT_DIR/publish-appcast.sh" "${APPCAST_ARGS[@]}"
+fi
+
 README_BEFORE_HASH="$(hash_file "$README_PATH")"
 patch_readme_download_link "$README_PATH" "$DOWNLOAD_URL"
 README_AFTER_HASH="$(hash_file "$README_PATH")"
@@ -498,6 +616,12 @@ echo "==> Release ready"
 echo "Repo: $REPO"
 echo "Tag: $TAG"
 echo "Download URL: $DOWNLOAD_URL"
+if [[ "$RUN_APPCAST" -eq 1 ]]; then
+  echo "Appcast repo: $APPCAST_REPO"
+  echo "Appcast base URL: $APPCAST_DOWNLOAD_BASE_URL"
+else
+  echo "Appcast: skipped (--skip-appcast)"
+fi
 echo "Assets:"
 printf ' - %s\n' "$DMG_PATH" "$ZIP_PATH" "$TAR_PATH" "$CHECKSUM_PATH"
 
