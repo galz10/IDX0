@@ -10,13 +10,13 @@ Use this guide when publishing a new IDX0 desktop release.
 xcrun notarytool store-credentials "<profile-name>" --apple-id "<apple-id>" --team-id "<team-id>" --password "<app-specific-password>"
 ```
 
-2. Confirm your DMG signing identity exists:
+1. Confirm your DMG signing identity exists:
 
 ```bash
 security find-identity -v -p codesigning
 ```
 
-3. Confirm GitHub CLI auth:
+1. Confirm GitHub CLI auth:
 
 ```bash
 gh auth status
@@ -63,7 +63,7 @@ Artifacts are written to `dist/`:
 - `IDX0-X.Y.Z-mac.tar.gz`
 - `SHA256SUMS.txt`
 
-## 4. Publish GitHub Release + Update Download Links
+## 4. Publish GitHub Release + Appcast + Download Links
 
 Draft release (default):
 
@@ -80,6 +80,9 @@ Published release:
 Notes:
 
 - `--version` is required.
+- Script publishes appcast by default via `scripts/publish-appcast.sh`.
+- Appcast defaults are inferred from `project.yml` `INFOPLIST_KEY_SUFeedURL` when it matches `raw.githubusercontent.com/<owner>/<repo>/<branch>/appcast.xml`.
+- If inference does not work for your feed URL, pass `--appcast-repo` and `--appcast-download-base-url`, or use `--skip-appcast`.
 - Download URL now follows the selected `--repo` (or current repo).
 - Default idx-web path is `/Users/gal/Documents/Github/idx-web/index.html`.
 - Override idx-web path with `--idx-web-index <path>`.
@@ -94,9 +97,9 @@ Notes:
 gh release view vX.Y.Z --repo galz10/IDX0
 ```
 
-2. Open release page and verify download links.
-3. Confirm `README.md` download link points to `vX.Y.Z`.
-4. If idx-web update was enabled, confirm CTA URL and `data-release-version`.
+1. Open release page and verify download links.
+2. Confirm `README.md` download link points to `vX.Y.Z`.
+3. If idx-web update was enabled, confirm CTA URL and `data-release-version`.
 
 ## 6. Recommended Command Template
 

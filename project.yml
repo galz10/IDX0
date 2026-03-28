@@ -7,6 +7,11 @@ settings:
     SWIFT_VERSION: 6.0
     MACOSX_DEPLOYMENT_TARGET: 14.0
 
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.7.0
+
 targets:
   idx0:
     type: application
@@ -27,6 +32,7 @@ targets:
     dependencies:
       - framework: GhosttyKit.xcframework
         embed: false
+      - package: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gal.idx0
@@ -38,6 +44,8 @@ targets:
         INFOPLIST_KEY_CFBundleIconFile: idx0.icns
         INFOPLIST_KEY_CFBundleDisplayName: IDX0
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_SUFeedURL: https://raw.githubusercontent.com/galz10/idx0-appcast/main/appcast.xml
+        INFOPLIST_KEY_SUPublicEDKey: CHANGE_ME_SPARKLE_PUBLIC_KEY
         SWIFT_OBJC_BRIDGING_HEADER: idx0-Bridging-Header.h
         HEADER_SEARCH_PATHS:
           - $(SRCROOT)
