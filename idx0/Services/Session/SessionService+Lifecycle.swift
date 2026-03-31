@@ -531,8 +531,16 @@ extension SessionService {
         tabs[activeIndex] = tab
         tabsBySession[sessionID] = tabs
         syncActivePaneState(for: sessionID)
+        // Pane focus indicates explicit terminal intent (used when deciding
+        // whether session selection should prefer browser/app focus).
+        setLastFocusedSurface(for: sessionID, surface: .terminal)
         if shouldLaunchVisibleTerminals(for: sessionID) {
             _ = requestLaunch(for: controllerID, ownerSessionID: sessionID, reason: .activeSplitPaneVisible)
+        }
+        // Keep Cmd-driven edit actions (copy/paste/select all) routed to the
+        // focused pane by synchronizing AppKit first-responder focus.
+        if selectedSessionID == sessionID {
+            ensurePaneController(for: controllerID)?.focus()
         }
     }
 

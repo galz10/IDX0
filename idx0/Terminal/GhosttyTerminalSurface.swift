@@ -494,7 +494,7 @@ final class GhosttyNativeView: NSView {
         keyEvent.action = action
         keyEvent.keycode = UInt32(event.keyCode)
         keyEvent.mods = modsFromEvent(event)
-        keyEvent.consumed_mods = consumedModsFromFlags(translationMods)
+        keyEvent.consumed_mods = GHOSTTY_MODS_NONE
         keyEvent.unshifted_codepoint = unshiftedCodepointFromEvent(event)
         keyEvent.composing = markedTextStorage.length > 0 || markedTextBefore
 
@@ -505,6 +505,7 @@ final class GhosttyNativeView: NSView {
             for text in accumulatedText {
                 text.withCString { ptr in
                     keyEvent.text = ptr
+                    keyEvent.consumed_mods = consumedModsFromFlags(translationMods, text: text)
                     _ = idx0_ghostty_surface_key(surface, keyEvent)
                 }
             }
@@ -513,10 +514,12 @@ final class GhosttyNativeView: NSView {
             if let text = textForKeyEvent(translationEvent) {
                 text.withCString { ptr in
                     keyEvent.text = ptr
+                    keyEvent.consumed_mods = consumedModsFromFlags(translationMods, text: text)
                     _ = idx0_ghostty_surface_key(surface, keyEvent)
                 }
             } else {
                 keyEvent.text = nil
+                keyEvent.consumed_mods = GHOSTTY_MODS_NONE
                 _ = idx0_ghostty_surface_key(surface, keyEvent)
             }
         }
@@ -553,7 +556,7 @@ final class GhosttyNativeView: NSView {
         }
 
         var keyEvent = ghostty_input_key_s()
-        keyEvent.action = GHOSTTY_ACTION_PRESS
+        keyEvent.action = modifierActionFromFlagsChangedEvent(event)
         keyEvent.keycode = UInt32(event.keyCode)
         keyEvent.mods = modsFromEvent(event)
         keyEvent.consumed_mods = GHOSTTY_MODS_NONE
@@ -574,11 +577,13 @@ final class GhosttyNativeView: NSView {
         return ghostty_input_mods_e(rawValue: mods)
     }
 
-    private func consumedModsFromFlags(_ flags: NSEvent.ModifierFlags) -> ghostty_input_mods_e {
-        var mods = GHOSTTY_MODS_NONE.rawValue
-        if flags.contains(.shift) { mods |= GHOSTTY_MODS_SHIFT.rawValue }
-        if flags.contains(.option) { mods |= GHOSTTY_MODS_ALT.rawValue }
-        return ghostty_input_mods_e(rawValue: mods)
+    private func consumedModsFromFlags(_ flags: NSEvent.ModifierFlags, text: String?) -> ghostty_input_mods_e {
+        GhosttyKeyEventTranslator.consumedMods(flags: flags, text: text)
+    }
+
+    private func modifierActionFromFlagsChangedEvent(_ event: NSEvent) -> ghostty_input_action_e {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        return GhosttyKeyEventTranslator.flagsChangedAction(keyCode: event.keyCode, flags: flags)
     }
 
     private func unshiftedCodepointFromEvent(_ event: NSEvent) -> UInt32 {
@@ -616,6 +621,51 @@ final class GhosttyNativeView: NSView {
         return chars
     }
 
+}
+
+enum GhosttyKeyEventTranslator {
+    static func consumedMods(flags: NSEvent.ModifierFlags, text: String?) -> ghostty_input_mods_e {
+        guard let text, !text.isEmpty else { return GHOSTTY_MODS_NONE }
+        var mods = GHOSTTY_MODS_NONE.rawValue
+        // Control-key text (Tab, Return, Escape, etc.) should not consume Shift;
+        // otherwise modified non-text keys lose their Shift semantics.
+        if flags.contains(.shift) && !isOnlyControlText(text) {
+            mods |= GHOSTTY_MODS_SHIFT.rawValue
+        }
+        if flags.contains(.option) {
+            mods |= GHOSTTY_MODS_ALT.rawValue
+        }
+        return ghostty_input_mods_e(rawValue: mods)
+    }
+
+    static func flagsChangedAction(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> ghostty_input_action_e {
+        guard let modifierFlag = modifierFlag(forKeyCode: keyCode) else {
+            return GHOSTTY_ACTION_PRESS
+        }
+        return flags.contains(modifierFlag) ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE
+    }
+
+    private static func modifierFlag(forKeyCode keyCode: UInt16) -> NSEvent.ModifierFlags? {
+        switch keyCode {
+        case 56, 60:
+            return .shift
+        case 59, 62:
+            return .control
+        case 58, 61:
+            return .option
+        case 54, 55:
+            return .command
+        default:
+            return nil
+        }
+    }
+
+    private static func isOnlyControlText(_ text: String) -> Bool {
+        text.unicodeScalars.allSatisfy { scalar in
+            let value = scalar.value
+            return value < 0x20 || (0x7F...0x9F).contains(value)
+        }
+    }
 }
 
 // MARK: - NSTextInputClient

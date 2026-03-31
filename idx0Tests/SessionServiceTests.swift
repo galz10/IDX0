@@ -127,6 +127,45 @@ final class SessionServiceTests: XCTestCase {
         XCTAssertEqual(service.selectedSessionID, first.id)
     }
 
+    func testSetFocusedPaneMarksTerminalAsLastFocusedSurface() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let first = try await service.createSession(from: SessionCreationRequest(title: "One")).session
+        let second = try await service.createSession(from: SessionCreationRequest(title: "Two")).session
+
+        service.toggleBrowserSplit(for: second.id)
+        service.markBrowserFocused(for: second.id)
+        service.focusSession(first.id)
+
+        XCTAssertEqual(service.lastFocusedSurfaceBySession[second.id], .browser)
+
+        service.setFocusedPane(sessionID: second.id, controllerID: second.id)
+
+        XCTAssertEqual(service.selectedSessionID, first.id)
+        XCTAssertEqual(service.lastFocusedSurfaceBySession[second.id], .terminal)
+    }
+
+    func testFocusSessionPrefersTerminalAfterSetFocusedPaneOnUnselectedSession() async throws {
+        let fixture = try Fixture()
+        let service = fixture.service
+
+        let first = try await service.createSession(from: SessionCreationRequest(title: "One")).session
+        let second = try await service.createSession(from: SessionCreationRequest(title: "Two")).session
+
+        service.toggleBrowserSplit(for: second.id)
+        service.markBrowserFocused(for: second.id)
+        service.focusSession(first.id)
+        service.focusSession(second.id)
+        XCTAssertEqual(service.lastFocusedSurfaceBySession[second.id], .browser)
+
+        service.focusSession(first.id)
+        service.setFocusedPane(sessionID: second.id, controllerID: second.id)
+        service.focusSession(second.id)
+
+        XCTAssertEqual(service.lastFocusedSurfaceBySession[second.id], .terminal)
+    }
+
     func testAttentionQueueUrgencyAndVisitResolution() async throws {
         let fixture = try Fixture()
         let service = fixture.service
