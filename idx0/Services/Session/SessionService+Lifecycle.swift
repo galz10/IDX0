@@ -41,22 +41,32 @@ extension SessionService {
     var worktreePath: String?
     var isWorktreeBacked = false
     var createdWorktree: WorktreeInfo?
+    let normalizedExistingWorktreePath = normalizePath(request.existingWorktreePath)
+    let explicitlyRequestedWorktree = request.createWorktree || normalizedExistingWorktreePath != nil
 
     if let normalizedRepo {
       branchName = request.branchName?.trimmingCharacters(in: .whitespacesAndNewlines)
       if branchName?.isEmpty == true { branchName = nil }
 
-      if request.createWorktree {
-        let repoInfo = try await worktreeService.validateRepo(path: normalizedRepo)
-        repoPath = repoInfo.topLevelPath
-        let worktree: WorktreeInfo = if let existingWorktreePath = normalizePath(request.existingWorktreePath) {
+      let repoInfo = try? await worktreeService.validateRepo(path: normalizedRepo)
+      let shouldCreateWorktree = explicitlyRequestedWorktree
+        || (settings.defaultCreateWorktreeForRepoSessions && repoInfo != nil)
+
+      if shouldCreateWorktree {
+        let resolvedRepoInfo: GitRepoInfo = if let repoInfo {
+          repoInfo
+        } else {
+          try await worktreeService.validateRepo(path: normalizedRepo)
+        }
+        repoPath = resolvedRepoInfo.topLevelPath
+        let worktree: WorktreeInfo = if let normalizedExistingWorktreePath {
           try await worktreeService.attachExistingWorktree(
-            repoPath: repoInfo.topLevelPath,
-            worktreePath: existingWorktreePath
+            repoPath: resolvedRepoInfo.topLevelPath,
+            worktreePath: normalizedExistingWorktreePath
           )
         } else {
           try await worktreeService.createWorktree(
-            repoPath: repoInfo.topLevelPath,
+            repoPath: resolvedRepoInfo.topLevelPath,
             branchName: branchName,
             sessionTitle: request.title
           )
@@ -66,7 +76,7 @@ extension SessionService {
         isWorktreeBacked = true
         createdWorktree = worktree
       } else {
-        if let repoInfo = try? await worktreeService.validateRepo(path: normalizedRepo) {
+        if let repoInfo {
           repoPath = repoInfo.topLevelPath
           if branchName == nil {
             branchName = repoInfo.currentBranch
