@@ -53,21 +53,19 @@ extension SessionService {
         || (settings.defaultCreateWorktreeForRepoSessions && repoInfo != nil)
 
       if shouldCreateWorktree {
-        let resolvedRepoInfo: GitRepoInfo
-        if let repoInfo {
-          resolvedRepoInfo = repoInfo
+        let resolvedRepoInfo: GitRepoInfo = if let repoInfo {
+          repoInfo
         } else {
-          resolvedRepoInfo = try await worktreeService.validateRepo(path: normalizedRepo)
+          try await worktreeService.validateRepo(path: normalizedRepo)
         }
         repoPath = resolvedRepoInfo.topLevelPath
-        let worktree: WorktreeInfo
-        if let normalizedExistingWorktreePath {
-          worktree = try await worktreeService.attachExistingWorktree(
+        let worktree: WorktreeInfo = if let normalizedExistingWorktreePath {
+          try await worktreeService.attachExistingWorktree(
             repoPath: resolvedRepoInfo.topLevelPath,
             worktreePath: normalizedExistingWorktreePath
           )
         } else {
-          worktree = try await worktreeService.createWorktree(
+          try await worktreeService.createWorktree(
             repoPath: resolvedRepoInfo.topLevelPath,
             branchName: branchName,
             sessionTitle: request.title
