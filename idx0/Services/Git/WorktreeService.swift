@@ -38,10 +38,21 @@ protocol WorktreeServiceProtocol {
 struct WorktreeService: WorktreeServiceProtocol {
     private let gitService: GitServiceProtocol
     private let paths: FileSystemPaths
+    private let fileManager: FileManager
+    private let worktreeNameGenerator: () -> String
 
-    init(gitService: GitServiceProtocol, paths: FileSystemPaths) {
+    init(
+        gitService: GitServiceProtocol,
+        paths: FileSystemPaths,
+        fileManager: FileManager = .default,
+        worktreeNameGenerator: @escaping () -> String = {
+            String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12)).lowercased()
+        }
+    ) {
         self.gitService = gitService
         self.paths = paths
+        self.fileManager = fileManager
+        self.worktreeNameGenerator = worktreeNameGenerator
     }
 
     func validateRepo(path: String) async throws -> GitRepoInfo {
@@ -94,7 +105,14 @@ struct WorktreeService: WorktreeServiceProtocol {
             throw WorktreeServiceError.invalidBranchName
         }
 
-        let worktreePath = uniqueWorktreePath(repoName: info.repoName, branchName: resolvedBranch)
+        ensureIDX0ExcludedInLocalRepo(repoTopLevelPath: info.topLevelPath)
+
+        let worktreePath: String
+        do {
+            worktreePath = try uniqueWorktreePath(repoTopLevelPath: info.topLevelPath)
+        } catch {
+            throw WorktreeServiceError.createFailed("Unable to prepare workspace worktree directory: \(error.localizedDescription)")
+        }
 
         do {
             return try await gitService.createWorktree(
@@ -145,22 +163,109 @@ struct WorktreeService: WorktreeServiceProtocol {
         }
     }
 
-    private func uniqueWorktreePath(repoName: String, branchName: String) -> String {
-        let safeRepo = BranchNameGenerator.slugify(repoName)
-        let safeBranch = BranchNameGenerator.slugify(branchName)
-        let root = paths.worktreesDirectory
-            .appendingPathComponent(safeRepo, isDirectory: true)
-
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-
-        var candidate = root.appendingPathComponent(safeBranch, isDirectory: true)
+    private func uniqueWorktreePath(repoTopLevelPath: String) throws -> String {
+        let root = try workspaceWorktreesDirectoryURL(repoTopLevelPath: repoTopLevelPath)
+        let baseName = "wt-\(sanitizedWorktreeToken(worktreeNameGenerator()))"
+        var candidate = root.appendingPathComponent(baseName, isDirectory: true)
         var suffix = 2
 
-        while FileManager.default.fileExists(atPath: candidate.path) {
-            candidate = root.appendingPathComponent("\(safeBranch)-\(suffix)", isDirectory: true)
+        while fileManager.fileExists(atPath: candidate.path) {
+            candidate = root.appendingPathComponent("\(baseName)-\(suffix)", isDirectory: true)
             suffix += 1
         }
 
         return candidate.path
+    }
+
+    private func workspaceWorktreesDirectoryURL(repoTopLevelPath: String) throws -> URL {
+        let root = URL(fileURLWithPath: repoTopLevelPath)
+            .standardizedFileURL
+            .appendingPathComponent(".idx0", isDirectory: true)
+            .appendingPathComponent("worktrees", isDirectory: true)
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    private func sanitizedWorktreeToken(_ rawValue: String) -> String {
+        let token = rawValue.lowercased().filter { character in
+            ("a"..."z").contains(character) || ("0"..."9").contains(character)
+        }
+        if !token.isEmpty {
+            return String(token.prefix(12))
+        }
+        return String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12)).lowercased()
+    }
+
+    private func ensureIDX0ExcludedInLocalRepo(repoTopLevelPath: String) {
+        guard let excludeFileURL = localGitExcludeURL(repoTopLevelPath: repoTopLevelPath) else {
+            return
+        }
+
+        do {
+            try fileManager.createDirectory(
+                at: excludeFileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+
+            let existing = (try? String(contentsOf: excludeFileURL, encoding: .utf8)) ?? ""
+            let entries = existing
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            guard !entries.contains(".idx0/") else { return }
+
+            var updated = existing
+            if !updated.isEmpty, !updated.hasSuffix("\n") {
+                updated.append("\n")
+            }
+            updated.append(".idx0/\n")
+            try updated.write(to: excludeFileURL, atomically: true, encoding: .utf8)
+        } catch {
+            Logger.error("Failed to update local git exclude for .idx0/: \(error.localizedDescription)")
+        }
+    }
+
+    private func localGitExcludeURL(repoTopLevelPath: String) -> URL? {
+        guard let gitDirectory = gitDirectoryURL(repoTopLevelPath: repoTopLevelPath) else {
+            return nil
+        }
+        return gitDirectory
+            .appendingPathComponent("info", isDirectory: true)
+            .appendingPathComponent("exclude", isDirectory: false)
+    }
+
+    private func gitDirectoryURL(repoTopLevelPath: String) -> URL? {
+        let repoURL = URL(fileURLWithPath: repoTopLevelPath).standardizedFileURL
+        let dotGitURL = repoURL.appendingPathComponent(".git", isDirectory: false)
+
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: dotGitURL.path, isDirectory: &isDirectory) else {
+            return nil
+        }
+
+        if isDirectory.boolValue {
+            return dotGitURL
+        }
+
+        guard let dotGitContents = try? String(contentsOf: dotGitURL, encoding: .utf8),
+              let directiveLine = dotGitContents
+                .components(separatedBy: .newlines)
+                .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        else {
+            return nil
+        }
+
+        let trimmed = directiveLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.lowercased().hasPrefix("gitdir:") else { return nil }
+
+        let rawPath = String(trimmed.dropFirst("gitdir:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawPath.isEmpty else { return nil }
+
+        let resolved: URL
+        if rawPath.hasPrefix("/") {
+            resolved = URL(fileURLWithPath: rawPath, isDirectory: true)
+        } else {
+            resolved = repoURL.appendingPathComponent(rawPath, isDirectory: true)
+        }
+        return resolved.standardizedFileURL
     }
 }

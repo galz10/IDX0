@@ -34,6 +34,14 @@ struct NewSessionSheet: View {
         sessionService.settings.appMode.showsVibeFeatures
     }
 
+    private var settingForcesWorktree: Bool {
+        sessionService.settings.defaultCreateWorktreeForRepoSessions && folderIsGitRepo
+    }
+
+    private var effectiveCreateWorktree: Bool {
+        settingForcesWorktree || createWorktree
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Create Session")
@@ -68,8 +76,15 @@ struct NewSessionSheet: View {
 
                         if showGitSection {
                             Toggle("Create worktree", isOn: $createWorktree)
+                                .disabled(settingForcesWorktree)
 
-                            if createWorktree {
+                            if settingForcesWorktree {
+                                Text("Worktree creation is enforced. Disable it in Settings > Sessions.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if effectiveCreateWorktree {
                                 if isCheckingRepo {
                                     HStack(spacing: 8) {
                                         ProgressView().controlSize(.small)
@@ -104,7 +119,7 @@ struct NewSessionSheet: View {
                                 }
                             }
 
-                            if !createWorktree, folderIsGitRepo {
+                            if !effectiveCreateWorktree, folderIsGitRepo {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text("Branch mode")
                                         .font(.caption)
@@ -230,6 +245,9 @@ struct NewSessionSheet: View {
         .onChange(of: folderIsGitRepo) { _, isRepo in
             if isRepo {
                 showGitSection = true
+                if sessionService.settings.defaultCreateWorktreeForRepoSessions {
+                    createWorktree = true
+                }
             }
         }
         .onChange(of: createWorktree) {
@@ -300,13 +318,13 @@ struct NewSessionSheet: View {
         if isCreating || isCheckingRepo {
             return true
         }
-        if createWorktree && !folderIsGitRepo {
+        if effectiveCreateWorktree && !folderIsGitRepo {
             return true
         }
-        if createWorktree && useExistingWorktree && existingWorktreePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if effectiveCreateWorktree && useExistingWorktree && existingWorktreePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return true
         }
-        if !createWorktree &&
+        if !effectiveCreateWorktree &&
             folderIsGitRepo &&
             repoBranchMode == .custom &&
             branchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -326,8 +344,6 @@ struct NewSessionSheet: View {
         networkPolicy = sessionService.settings.defaultNetworkPolicy
         if preset == .quick {
             folderPath = ""
-            createWorktree = false
-        } else if preset == .repo {
             createWorktree = false
         } else if preset == .worktree {
             createWorktree = true
@@ -359,7 +375,7 @@ struct NewSessionSheet: View {
     }
 
     private func prefillBranchIfNeeded() {
-        guard createWorktree, folderIsGitRepo, !useExistingWorktree else { return }
+        guard effectiveCreateWorktree, folderIsGitRepo, !useExistingWorktree else { return }
         guard branchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let repoName = URL(fileURLWithPath: folderPath).lastPathComponent
         branchName = BranchNameGenerator.generate(
@@ -395,7 +411,13 @@ struct NewSessionSheet: View {
                     branchName = ""
                     useExistingWorktree = false
                     existingWorktreePath = ""
+                    if sessionService.settings.defaultCreateWorktreeForRepoSessions {
+                        createWorktree = false
+                    }
                 } else {
+                    if sessionService.settings.defaultCreateWorktreeForRepoSessions {
+                        createWorktree = true
+                    }
                     prefillBranchIfNeeded()
                 }
             }
@@ -412,7 +434,7 @@ struct NewSessionSheet: View {
                     from: SessionCreationRequest(
                         title: title,
                         repoPath: folderPath,
-                        createWorktree: createWorktree,
+                        createWorktree: effectiveCreateWorktree,
                         branchName: resolvedBranchName,
                         existingWorktreePath: useExistingWorktree ? existingWorktreePath : nil,
                         shellPath: shellPath,
@@ -445,7 +467,7 @@ struct NewSessionSheet: View {
     private var resolvedBranchName: String? {
         let cleaned = branchName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return nil }
-        if createWorktree { return cleaned }
+        if effectiveCreateWorktree { return cleaned }
         if folderIsGitRepo && repoBranchMode == .custom { return cleaned }
         return nil
     }

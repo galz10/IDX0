@@ -23,7 +23,7 @@ struct SessionSettingsTab: View {
                         "Create Worktree By Default For Repo Sessions",
                         isOn: binding(\.defaultCreateWorktreeForRepoSessions)
                     )
-                    Text("Automatically enable worktree creation when a git repo is selected")
+                    Text("When enabled, repo-backed sessions always create a worktree")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }

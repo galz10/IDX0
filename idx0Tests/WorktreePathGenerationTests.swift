@@ -3,26 +3,104 @@ import XCTest
 @testable import idx0
 
 final class WorktreePathGenerationTests: XCTestCase {
-    func testCreateWorktreeAppendsCollisionSuffix() async throws {
+    func testCreateWorktreeUsesWorkspaceLocalPathAndAppendsCollisionSuffix() async throws {
         let temp = FileManager.default.temporaryDirectory
             .appendingPathComponent("idx0-worktree-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
 
         let paths = try makePaths(root: temp)
+        let repoRoot = try makeRepoRoot(at: temp, name: "repo")
         let git = MockGitService()
-        let service = WorktreeService(gitService: git, paths: paths)
+        let service = WorktreeService(
+            gitService: git,
+            paths: paths,
+            worktreeNameGenerator: { "collision-name" }
+        )
 
-        let first = try await service.createWorktree(repoPath: "/tmp/repo", branchName: "idx0/fix", sessionTitle: "Fix")
+        let first = try await service.createWorktree(repoPath: repoRoot.path, branchName: "idx0/fix", sessionTitle: "Fix")
 
         try FileManager.default.createDirectory(atPath: first.worktreePath, withIntermediateDirectories: true)
 
-        _ = try await service.createWorktree(repoPath: "/tmp/repo", branchName: "idx0/fix", sessionTitle: "Fix")
+        let second = try await service.createWorktree(repoPath: repoRoot.path, branchName: "idx0/fix-2", sessionTitle: "Fix")
 
         let createdPaths = git.createdWorktreePaths
         XCTAssertEqual(createdPaths.count, 2)
-        XCTAssertTrue(createdPaths[0].hasSuffix("/idx0-fix"))
-        XCTAssertTrue(createdPaths[1].hasSuffix("/idx0-fix-2"))
+        XCTAssertEqual(URL(fileURLWithPath: first.worktreePath).lastPathComponent, "wt-collisionnam")
+        XCTAssertEqual(URL(fileURLWithPath: second.worktreePath).lastPathComponent, "wt-collisionnam-2")
+
+        let expectedPrefix = repoRoot
+            .appendingPathComponent(".idx0/worktrees", isDirectory: true)
+            .path + "/"
+        XCTAssertTrue(first.worktreePath.hasPrefix(expectedPrefix))
+        XCTAssertTrue(second.worktreePath.hasPrefix(expectedPrefix))
+    }
+
+    func testCreateWorktreeAddsIDX0RuleToLocalExcludeIdempotently() async throws {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("idx0-worktree-exclude-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let paths = try makePaths(root: temp)
+        let repoRoot = try makeRepoRoot(at: temp, name: "repo")
+        let excludeURL = repoRoot.appendingPathComponent(".git/info/exclude", isDirectory: false)
+        try "existing-rule\n".write(to: excludeURL, atomically: true, encoding: .utf8)
+
+        let git = MockGitService()
+        let service = WorktreeService(
+            gitService: git,
+            paths: paths,
+            worktreeNameGenerator: { "idempotent" }
+        )
+
+        _ = try await service.createWorktree(repoPath: repoRoot.path, branchName: "idx0/one", sessionTitle: "One")
+        _ = try await service.createWorktree(repoPath: repoRoot.path, branchName: "idx0/two", sessionTitle: "Two")
+
+        let exclude = try String(contentsOf: excludeURL, encoding: .utf8)
+        let normalizedLines = exclude
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        XCTAssertEqual(normalizedLines.filter { $0 == ".idx0/" }.count, 1)
+    }
+
+    func testCreateWorktreeUpdatesExcludeWhenDotGitIsFile() async throws {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("idx0-worktree-dotgit-file-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let paths = try makePaths(root: temp)
+        let repoRoot = temp.appendingPathComponent("repo", isDirectory: true)
+        try FileManager.default.createDirectory(at: repoRoot, withIntermediateDirectories: true)
+
+        let actualGitDir = temp.appendingPathComponent("shared-git-dir", isDirectory: true)
+        let infoDir = actualGitDir.appendingPathComponent("info", isDirectory: true)
+        try FileManager.default.createDirectory(at: infoDir, withIntermediateDirectories: true)
+        let excludeURL = infoDir.appendingPathComponent("exclude", isDirectory: false)
+        try "header\n".write(to: excludeURL, atomically: true, encoding: .utf8)
+        try "gitdir: \(actualGitDir.path)\n".write(
+            to: repoRoot.appendingPathComponent(".git", isDirectory: false),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let git = MockGitService()
+        let service = WorktreeService(
+            gitService: git,
+            paths: paths,
+            worktreeNameGenerator: { "dotgitfile" }
+        )
+
+        _ = try await service.createWorktree(repoPath: repoRoot.path, branchName: "idx0/dotgit", sessionTitle: "DotGit")
+
+        let exclude = try String(contentsOf: excludeURL, encoding: .utf8)
+        let normalizedLines = exclude
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        XCTAssertEqual(normalizedLines.filter { $0 == ".idx0/" }.count, 1)
     }
 
     func testDeleteWorktreeIfCleanRemovesThroughGit() async throws {
@@ -92,6 +170,15 @@ final class WorktreePathGenerationTests: XCTestCase {
             tempDirectory: appSupport.appendingPathComponent("temp", isDirectory: true),
             worktreesDirectory: appSupport.appendingPathComponent("worktrees", isDirectory: true)
         )
+    }
+
+    private func makeRepoRoot(at root: URL, name: String) throws -> URL {
+        let repoRoot = root.appendingPathComponent(name, isDirectory: true)
+        let infoDir = repoRoot
+            .appendingPathComponent(".git", isDirectory: true)
+            .appendingPathComponent("info", isDirectory: true)
+        try FileManager.default.createDirectory(at: infoDir, withIntermediateDirectories: true)
+        return repoRoot
     }
 }
 

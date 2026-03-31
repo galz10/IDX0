@@ -20,7 +20,7 @@ struct InlineSessionSettings: View {
 
             SettingToggleRow(
                 label: "Create Worktree By Default",
-                caption: "Automatically enable git worktree creation when opening repo-backed sessions.",
+                caption: "When enabled, repo-backed sessions always create a worktree.",
                 isOn: binding(\.defaultCreateWorktreeForRepoSessions)
             )
 

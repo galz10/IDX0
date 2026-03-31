@@ -5,13 +5,14 @@ import XCTest
 
 @MainActor
 final class SessionServiceIntegrationTests: XCTestCase {
-    func testCreateRepoBackedSessionFromGitRepo() async throws {
+    func testCreateRepoBackedSessionWithoutWorktreeWhenSettingDisabled() async throws {
         let root = try makeTempRoot(prefix: "idx0-integration-repo")
         defer { try? FileManager.default.removeItem(at: root) }
 
         let repo = try makeGitRepo(root: root, name: "repo")
         let branch = try currentBranch(at: repo.path)
         let service = try makeService(root: root)
+        service.saveSettings { $0.defaultCreateWorktreeForRepoSessions = false }
 
         let result = try await service.createSession(from: SessionCreationRequest(
             title: "Repo Session",
@@ -29,6 +30,31 @@ final class SessionServiceIntegrationTests: XCTestCase {
         XCTAssertNil(result.session.worktreePath)
 
         try await Task.sleep(nanoseconds: 300_000_000)
+    }
+
+    func testCreateRepoBackedSessionCreatesWorktreeByDefaultWhenSettingEnabled() async throws {
+        let root = try makeTempRoot(prefix: "idx0-integration-repo-default-worktree")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repo = try makeGitRepo(root: root, name: "repo")
+        let service = try makeService(root: root)
+        service.saveSettings { $0.defaultCreateWorktreeForRepoSessions = true }
+
+        let result = try await service.createSession(from: SessionCreationRequest(
+            title: "Repo Session",
+            repoPath: repo.path,
+            createWorktree: false,
+            branchName: nil,
+            existingWorktreePath: nil,
+            shellPath: nil
+        ))
+
+        XCTAssertTrue(result.session.isWorktreeBacked)
+        XCTAssertNotNil(result.session.worktreePath)
+        XCTAssertNotNil(result.worktree)
+        if let worktreePath = result.session.worktreePath {
+            XCTAssertTrue(worktreePath.hasPrefix(repo.path + "/.idx0/worktrees/"))
+        }
     }
 
     func testCreateWorktreeBackedSessionFromGitRepo() async throws {
@@ -57,6 +83,13 @@ final class SessionServiceIntegrationTests: XCTestCase {
         XCTAssertEqual(result.session.branchName, branch)
         XCTAssertEqual(result.worktree?.branchName, branch)
         XCTAssertEqual(result.worktree?.worktreePath, worktreePath)
+        XCTAssertTrue(worktreePath.hasPrefix(repo.path + "/.idx0/worktrees/"))
+
+        let worktreeName = URL(fileURLWithPath: worktreePath).lastPathComponent
+        let pattern = #"^wt-[a-z0-9]{12}(?:-[0-9]+)?$"#
+        let regex = try NSRegularExpression(pattern: pattern)
+        let range = NSRange(location: 0, length: worktreeName.utf16.count)
+        XCTAssertNotNil(regex.firstMatch(in: worktreeName, options: [], range: range))
 
         var isDirectory: ObjCBool = false
         XCTAssertTrue(FileManager.default.fileExists(atPath: worktreePath, isDirectory: &isDirectory))
@@ -64,6 +97,9 @@ final class SessionServiceIntegrationTests: XCTestCase {
 
         let worktreeList = try runGit(["worktree", "list", "--porcelain"], currentDirectory: repo.path)
         XCTAssertTrue(worktreeList.contains(worktreePath))
+        let status = try runGit(["status", "--short"], currentDirectory: repo.path)
+        XCTAssertFalse(status.contains(".idx0/"))
+        XCTAssertTrue(status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         try await Task.sleep(nanoseconds: 300_000_000)
     }
