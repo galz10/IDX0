@@ -1,3 +1,4 @@
+import AppKit
 @testable import idx0
 import XCTest
 
@@ -114,5 +115,35 @@ final class ShortcutRegistryTests: XCTestCase {
 
     XCTAssertEqual(descriptor?.title, "Check for Updates")
     XCTAssertNil(registry.primaryBinding(for: .checkForUpdates, settings: AppSettings()))
+  }
+
+  func testConsumedModsDoesNotConsumeShiftForControlText() {
+    let mods = GhosttyKeyEventTranslator.consumedMods(flags: [.shift], text: "\r")
+
+    XCTAssertEqual(mods.rawValue, GHOSTTY_MODS_NONE.rawValue)
+  }
+
+  func testConsumedModsConsumesShiftForPrintableText() {
+    let mods = GhosttyKeyEventTranslator.consumedMods(flags: [.shift], text: "A")
+
+    XCTAssertEqual(mods.rawValue, GHOSTTY_MODS_SHIFT.rawValue)
+  }
+
+  func testConsumedModsConsumesOptionForPrintableText() {
+    let mods = GhosttyKeyEventTranslator.consumedMods(flags: [.option], text: "å")
+
+    XCTAssertEqual(mods.rawValue, GHOSTTY_MODS_ALT.rawValue)
+  }
+
+  func testFlagsChangedReleaseWhenModifierFlagClears() {
+    let action = GhosttyKeyEventTranslator.flagsChangedAction(keyCode: 56, flags: [])
+
+    XCTAssertEqual(action, GHOSTTY_ACTION_RELEASE)
+  }
+
+  func testFlagsChangedPressWhenModifierFlagSet() {
+    let action = GhosttyKeyEventTranslator.flagsChangedAction(keyCode: 56, flags: [.shift])
+
+    XCTAssertEqual(action, GHOSTTY_ACTION_PRESS)
   }
 }
