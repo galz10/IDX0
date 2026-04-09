@@ -18,6 +18,7 @@ RUN_MAINTAINABILITY=1
 NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 DMG_SIGNING_IDENTITY="${DMG_SIGNING_IDENTITY:-}"
 RUN_DMG_SMOKE_TEST=1
+APPCAST_DOWNLOAD_BASE_URL="${APPCAST_DOWNLOAD_BASE_URL:-}"
 
 OUTPUT_DIR="$ROOT_DIR/dist"
 DERIVED_DATA_PATH="$ROOT_DIR/.build/derived-release"
@@ -41,6 +42,9 @@ Options:
   --notary-profile <name>     Keychain profile for notarytool (required; can also use NOTARY_PROFILE)
   --dmg-sign-identity <name>  Signing identity for DMG codesign (required; can also use DMG_SIGNING_IDENTITY)
   -h, --help                  Show this help text
+
+Environment:
+  APPCAST_DOWNLOAD_BASE_URL   Optional public base URL used to populate generated appcast entry metadata.
 EOF
 }
 
@@ -200,6 +204,7 @@ ZIP_PATH="$OUTPUT_DIR/IDX0-${VERSION}-mac.zip"
 TAR_PATH="$OUTPUT_DIR/IDX0-${VERSION}-mac.tar.gz"
 DMG_PATH="$OUTPUT_DIR/IDX0-${VERSION}.dmg"
 CHECKSUM_PATH="$OUTPUT_DIR/SHA256SUMS.txt"
+APPCAST_ENTRY_PATH="$OUTPUT_DIR/IDX0-${VERSION}-appcast-entry.json"
 
 echo "==> Packaging zip"
 rm -f "$ZIP_PATH"
@@ -283,6 +288,28 @@ echo "==> Writing SHA256 checksums"
   shasum -a 256 "$(basename "$DMG_PATH")" "$(basename "$ZIP_PATH")" "$(basename "$TAR_PATH")" > "$(basename "$CHECKSUM_PATH")"
 )
 
+echo "==> Writing appcast entry metadata"
+ZIP_SIZE="$(stat -f%z "$ZIP_PATH")"
+APPCAST_PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+if [[ -n "$APPCAST_DOWNLOAD_BASE_URL" ]]; then
+  APPCAST_DOWNLOAD_URL="${APPCAST_DOWNLOAD_BASE_URL%/}/$(basename "$ZIP_PATH")"
+else
+  APPCAST_DOWNLOAD_URL="https://example.invalid/$(basename "$ZIP_PATH")"
+fi
+
+cat > "$APPCAST_ENTRY_PATH" <<EOF
+[
+  {
+    "version": "$VERSION",
+    "downloadURL": "$APPCAST_DOWNLOAD_URL",
+    "length": $ZIP_SIZE,
+    "pubDate": "$APPCAST_PUB_DATE",
+    "prerelease": false,
+    "minimumSystemVersion": "14.0"
+  }
+]
+EOF
+
 echo
 echo "==> Release artifacts ready"
-ls -lh "$DMG_PATH" "$ZIP_PATH" "$TAR_PATH" "$CHECKSUM_PATH"
+ls -lh "$DMG_PATH" "$ZIP_PATH" "$TAR_PATH" "$CHECKSUM_PATH" "$APPCAST_ENTRY_PATH"
